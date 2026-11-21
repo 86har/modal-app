@@ -1,4 +1,27 @@
+import json
+import os
+from pathlib import Path
+
 import modal
+
+# ---- config.json (setup.bat と同じ階層) の読み込み ----
+def _load_config():
+    """config.json を探して読み込む。KREA_CONFIG 環境変数を優先し、
+    無ければこのファイルの親フォルダを順にさかのぼって探す。"""
+    candidates = []
+    env = os.environ.get("KREA_CONFIG")
+    if env:
+        candidates.append(Path(env))
+    candidates += [p / "config.json" for p in Path(__file__).resolve().parents]
+    for path in candidates:
+        if path.is_file():
+            try:
+                return json.loads(path.read_text(encoding="utf-8-sig")), path.parent
+            except Exception as e:
+                print(f"[config] 読み込みに失敗しました: {path}: {e}")
+    return {}, None
+
+_cfg, _cfg_dir = _load_config()
 
 #   GPU種別              $/秒        $/時間(目安)  $30クレジットでの稼働時間目安
 #   ------------------- ---------- ----------- --------------------------
@@ -15,7 +38,8 @@ import modal
 #   Nvidia T4            0.000164   $0.59     50.8 時間
 
 APP_NAME = "krea2"
-GPU = "L40S"  
+
+GPU = _cfg.get("GPU") or "A10"
 IDLE_SECONDS = 600
 MODELS = "/models"
 COMFY = "/root/ComfyUI"

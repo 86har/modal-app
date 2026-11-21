@@ -22,27 +22,6 @@
   var infoRes = document.getElementById('infoRes');
   var infoSize = document.getElementById('infoSize');
   var infoDate = document.getElementById('infoDate');
-  var copyPromptBtn = document.getElementById('copyPromptBtn');
-  var autoSwitchToggle = document.getElementById('autoSwitchToggle');
-
-  // 新しい画像が追加されたとき、自動で表示を切り替えるかどうか（設定は端末に保存）
-  var AUTO_SWITCH_STORAGE_KEY = 'autoSwitchImages';
-  var autoSwitchEnabled = true;
-  (function initAutoSwitch() {
-    try {
-      var saved = localStorage.getItem(AUTO_SWITCH_STORAGE_KEY);
-      if (saved !== null) autoSwitchEnabled = saved === '1';
-    } catch (e) {}
-    if (autoSwitchToggle) autoSwitchToggle.checked = autoSwitchEnabled;
-  })();
-  if (autoSwitchToggle) {
-    autoSwitchToggle.addEventListener('change', function () {
-      autoSwitchEnabled = autoSwitchToggle.checked;
-      try {
-        localStorage.setItem(AUTO_SWITCH_STORAGE_KEY, autoSwitchEnabled ? '1' : '0');
-      } catch (e) {}
-    });
-  }
 
   var MIN_SCALE = 0.02;
   var MAX_SCALE = Infinity;
@@ -128,22 +107,9 @@
   }
 
   img.addEventListener('load', function () {
-    img.classList.remove('img-broken');
     resetView();
     infoRes.textContent = img.naturalWidth + ' × ' + img.naturalHeight;
     sidebarPreviewImg.src = img.src;
-  });
-  img.addEventListener('error', function () {
-    // 画像が存在しない/取得に失敗した場合は、壊れたアイコンを出さず真っ暗な背景のままにする
-    img.classList.add('img-broken');
-    infoRes.textContent = '-';
-  });
-
-  sidebarPreviewImg.addEventListener('load', function () {
-    sidebarPreviewImg.classList.remove('img-broken');
-  });
-  sidebarPreviewImg.addEventListener('error', function () {
-    sidebarPreviewImg.classList.add('img-broken');
   });
   window.addEventListener('resize', function () {
     resetView();
@@ -383,9 +349,6 @@
         if (suppressThumbClick) return;
         selectImage(item);
       });
-      thumb.addEventListener('error', function () {
-        thumb.classList.add('img-broken');
-      });
       thumbStrip.appendChild(thumb);
     });
   }
@@ -403,62 +366,6 @@
       thumbs[i].classList.toggle('active', thumbs[i].alt === item.name);
     }
     updateNavButtons();
-  }
-
-  // ---- プロンプトのコピー（画像名と同名の output_prompt/*.json を参照） ----
-  var COPY_LABEL = 'プロンプトをコピー';
-  var copyBtnTimer = null;
-
-  function setCopyBtnState(label, state) {
-    if (!copyPromptBtn) return;
-    copyPromptBtn.textContent = label;
-    copyPromptBtn.classList.toggle('is-ok', state === 'ok');
-    copyPromptBtn.classList.toggle('is-error', state === 'error');
-    clearTimeout(copyBtnTimer);
-    copyBtnTimer = setTimeout(function () {
-      copyPromptBtn.textContent = COPY_LABEL;
-      copyPromptBtn.classList.remove('is-ok', 'is-error');
-    }, 1500);
-  }
-
-  function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text);
-    }
-    return new Promise(function (resolve, reject) {
-      var ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      var ok = false;
-      try { ok = document.execCommand('copy'); } catch (e) {}
-      document.body.removeChild(ta);
-      if (ok) resolve(); else reject(new Error('copy'));
-    });
-  }
-
-  if (copyPromptBtn) {
-    copyPromptBtn.addEventListener('click', function () {
-      if (!currentName) {
-        setCopyBtnState('画像がありません', 'error');
-        return;
-      }
-      fetch('/prompt/' + encodeURIComponent(currentName), { cache: 'no-store' })
-        .then(function (r) {
-          if (!r.ok) throw new Error('notfound');
-          return r.json();
-        })
-        .then(function (data) {
-          // 保存済みJSONに \r\n が混ざっていても \n に統一してコピーする
-          return copyText(data.prompt.replace(/\r\n?/g, '\n'));
-        })
-        .then(function () { setCopyBtnState('コピーしました', 'ok'); })
-        .catch(function (e) {
-          setCopyBtnState(e && e.message === 'notfound' ? 'プロンプトがありません' : 'コピーに失敗しました', 'error');
-        });
-    });
   }
 
   function loadImagesList(selectLatest) {
@@ -483,8 +390,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.updated) {
-          // トグルがOFFのときは一覧・サムネイルだけ更新し、表示中の画像は切り替えない
-          loadImagesList(autoSwitchEnabled).then(flashGlow);
+          loadImagesList(true).then(flashGlow);
         }
         waitForUpdate();
       })

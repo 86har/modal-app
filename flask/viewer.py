@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 import threading
@@ -15,9 +14,34 @@ BASE_DIR = Path(__file__).resolve().parent
 HOST = "127.0.0.1"
 VIEWER_PORT = 5000
 
-# 日本語プロンプトの保存先（gen_1.py と同じ階層 = このファイルの親フォルダ）
-PROMPT_DIR = BASE_DIR.parent / "output_prompts"
-WATCH_DIR = BASE_DIR.parent / "output_images"
+import json
+import os
+from pathlib import Path
+
+def _load_config():
+    """config.json を探して読み込む。KREA_CONFIG 環境変数を優先し、
+    無ければこのファイルの親フォルダを順にさかのぼって探す。"""
+    candidates = []
+    env = os.environ.get("KREA_CONFIG")
+    if env:
+        candidates.append(Path(env))
+    candidates += [p / "config.json" for p in Path(__file__).resolve().parents]
+    for path in candidates:
+        if path.is_file():
+            try:
+                return json.loads(path.read_text(encoding="utf-8-sig")), path.parent
+            except Exception as e:
+                print(f"[config] 読み込みに失敗しました: {path}: {e}")
+    return {}, None
+
+_cfg, _cfg_dir = _load_config()
+
+_watch = os.path.expandvars(os.path.expanduser(
+    _cfg.get("WATCH_DIR") or str(Path.home() / "Downloads" / "outputs")
+))
+if not os.path.isabs(_watch) and _cfg_dir:
+    _watch = str(_cfg_dir / _watch)   # 相対パスは config.json のある場所が基準
+WATCH_DIR = _watch
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
 GRACE_SECONDS = 2.0
 NO_CONNECT_TIMEOUT = 120
@@ -85,24 +109,6 @@ def image_by_name(filename):
     if not os.path.isfile(os.path.join(WATCH_DIR, name)):
         return "画像が見つかりません", 404
     return send_from_directory(WATCH_DIR, name)
-
-@viewer_app.route("/prompt/<path:filename>")
-def prompt_by_name(filename):
-    name = os.path.basename(filename)
-    if not name or not is_image(name):
-        return jsonify({"error": "不正なファイル名です"}), 400
-    path = PROMPT_DIR / (os.path.splitext(name)[0] + ".json")
-    if not path.is_file():
-        return jsonify({"error": "プロンプトが見つかりません"}), 404
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return jsonify({"error": "プロンプトを読み取れませんでした"}), 500
-    prompt = data.get("prompt") if isinstance(data, dict) else None
-    if not isinstance(prompt, str):
-        return jsonify({"error": "プロンプトが見つかりません"}), 404
-    return jsonify({"prompt": prompt})
 
 @viewer_app.route("/images")
 def images():
@@ -196,9 +202,8 @@ def _watchdog(observer):
 
 def main():
     observer = None
-    if not os.path.isdir(WATCH_DIR):
-        print(f"[viewer] フォルダが見つかりません: {WATCH_DIR}")
-        sys.exit(1)
+    os.makedirs(WATCH_DIR, exist_ok=True)
+    print(f"[viewer] 監視フォルダ: {WATCH_DIR}")
 
     current_image["name"] = get_latest_image()
     if current_image["name"] is None:
