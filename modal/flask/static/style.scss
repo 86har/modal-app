@@ -1,0 +1,468 @@
+$bg-color: #000;
+$select-border: #3399ff;
+$select-fill: rgba(51, 153, 255, 0.15);
+
+$panel-bg: #111;
+$panel-border: rgba(255, 255, 255, 0.08);
+$text-main: #eee;
+$text-sub: #888;
+
+$sidebar-width: 280px;
+$strip-height: 120px;
+
+$toggle-track-off: rgba(255, 255, 255, 0.15);
+$toggle-thumb: $text-main;
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: $bg-color;
+  overflow: hidden;
+}
+
+#viewer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: $sidebar-width;
+  bottom: $strip-height;
+  overflow: hidden;
+  background: $bg-color;
+  cursor: grab;
+
+  &.dragging {
+    cursor: grabbing;
+  }
+
+  &.rect-mode {
+    cursor: crosshair;
+  }
+}
+
+#img {
+  position: absolute;
+  transform-origin: 0 0;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+// 画像が存在しない/読み込みに失敗したときは、壊れたアイコンを出さず背景色のまま真っ暗にする
+.img-broken {
+  visibility: hidden;
+}
+
+#selection {
+  position: absolute;
+  border: 2px solid $select-border;
+  background: $select-fill;
+  display: none;
+  pointer-events: none;
+}
+
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 68px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(17, 17, 17, 0.65);
+  color: $text-main;
+  font-size: 22px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 4;
+  opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s, border-color 0.15s, transform 0.15s;
+  user-select: none;
+
+  &:hover:not(:disabled) {
+    opacity: 1;
+    background: rgba(35, 35, 35, 0.9);
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(-50%) scale(0.96);
+  }
+
+  &:disabled {
+    opacity: 0.2;
+    cursor: default;
+  }
+}
+
+.nav-prev {
+  left: 14px;
+}
+
+.nav-next {
+  right: 14px;
+}
+
+#sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: $sidebar-width;
+  box-sizing: border-box;
+  padding: 16px;
+  background: $panel-bg;
+  border-left: 1px solid $panel-border;
+  color: $text-main;
+  font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  overflow-y: auto;
+  z-index: 5;
+}
+
+.sidebar-top {
+  min-height: 0;
+}
+
+.sidebar-section-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: $text-sub;
+  margin-bottom: 8px;
+}
+
+#sidebarPreviewWrap {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: $bg-color;
+  border: 1px solid $panel-border;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+#sidebarPreviewWrap.is-favorite {
+  background: #ffdce9;
+  border-color: #ffb3cf;
+}
+
+#sidebarPreviewImg {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+#sidebarFilename {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #aaa;
+  word-break: break-all;
+  margin-bottom: 16px;
+}
+
+.copy-prompt-btn {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: $text-main;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+
+  &.is-ok {
+    // border-color: $select-border;
+    border-color: rgb(220, 220, 220);
+    background-color: rgb(220, 220, 220);
+    color: rgb(33, 33, 33);
+  }
+
+  &.is-error {
+    border-color: #e5736b;
+    color: #e5736b;
+  }
+}
+
+#sidebarInfo {
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid $panel-border;
+    font-size: 13px;
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  .info-label {
+    color: $text-sub;
+    flex-shrink: 0;
+  }
+
+  .info-value {
+    color: $text-main;
+    text-align: right;
+    word-break: break-all;
+  }
+}
+
+.sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  font-size: 12px;
+  color: #bbb;
+  cursor: pointer;
+}
+
+.favorite-folder-block {
+  padding-bottom: 12px;
+  border-bottom: 1px solid $panel-border;
+  margin-bottom: 4px;
+}
+
+.favorite-folder-btn {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: $text-main;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.favorite-folder-path {
+  font-size: 11px;
+  line-height: 1.4;
+  color: $text-sub;
+  word-break: break-all;
+
+  &.is-unset {
+    color: #666;
+  }
+}
+
+.sidebar-row-label {
+  line-height: 1.3;
+}
+
+// モダンでシンプルなトグルスイッチ（iOS風のピル型）
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+
+  input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+
+    &:checked + .switch-track {
+      // オンのときは、つまみと背景の配色を入れ替える（背景が明るく、つまみが青くなる）
+      background: #c2c2c2;
+
+      .switch-thumb {
+        background: #343434;
+        transform: translateX(16px);
+      }
+    }
+
+    &:focus-visible + .switch-track {
+      outline: 2px solid #343434;
+      outline-offset: 2px;
+    }
+  }
+}
+
+.switch-track {
+  display: inline-block;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: $toggle-track-off;
+  transition: background 0.15s ease;
+}
+
+.switch-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 2px;
+  border-radius: 50%;
+  background: $toggle-thumb;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+#sidebarShortcuts {
+  padding-top: 12px;
+  border-top: 1px solid $panel-border;
+
+  .shortcut-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    font-size: 12px;
+
+    li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      color: #bbb;
+    }
+
+    kbd {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: $text-main;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    span {
+      text-align: right;
+      color: $text-sub;
+      font-size: 11px;
+    }
+  }
+}
+
+#thumbStrip {
+  position: fixed;
+  left: 0;
+  right: $sidebar-width;
+  bottom: 0;
+  height: $strip-height;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: $panel-bg;
+  border-top: 1px solid $panel-border;
+  overflow-x: auto;
+  overflow-y: hidden;
+  user-select: none;
+  cursor: grab;
+  z-index: 5;
+
+  &.dragging {
+    cursor: grabbing;
+
+    .thumb {
+      cursor: grabbing;
+    }
+  }
+
+  &::-webkit-scrollbar {
+    height: 8px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgb(255, 255, 255);
+    border-radius: 4px;
+  }
+}
+
+.thumb {
+  flex-shrink: 0;
+  height: 100%;
+  width: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  opacity: 0.65;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: opacity 0.15s, border-color 0.15s, transform 0.1s;
+
+  &:hover {
+    opacity: 1;
+  }
+
+  &.active {
+    opacity: 1;
+    border-color: $select-border;
+  }
+}
+
+#glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0;
+  box-shadow:
+    inset 0 0 60px 8px rgba(255, 255, 255, 0.85),
+    inset 0 0 180px 24px rgba(74, 74, 74, 0.35);
+
+  &.active {
+    animation: glowPulse 1s ease-out;
+  }
+
+  &.glow-pink {
+    box-shadow:
+      inset 0 0 60px 8px rgba(255, 110, 180, 0.85),
+      inset 0 0 180px 24px rgba(255, 60, 150, 0.35);
+  }
+}
+
+@keyframes glowPulse {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  100% { opacity: 0; }
+}

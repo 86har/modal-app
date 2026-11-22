@@ -1,0 +1,480 @@
+html { background-color: #000 !important; }
+body { filter: invert(1) hue-rotate(180deg) !important; }
+html img,
+html picture,
+html video,
+html canvas,
+html iframe,
+html [style*="background-image"],
+html .my-injected-element,
+html .my-glow-overlay {
+  filter: invert(1) hue-rotate(180deg) !important;
+}
+
+.my-injected-element {
+    --card-bg: #ffffff;
+    --card-border: #e5e5e5;
+    --text: #1c1c1c;
+    --muted: gray;
+    --divider: #e5e5e5;
+    --btn-bg: #ffffff;
+    --btn-border: #9c9c9c;
+    --btn-text: #525252;
+    --btn-hover-bg: #9c9c9c;
+    --btn-hover-border: #4fa7fc;
+    --btn-hover-text: #ffffff;
+    --swap-bg: #f3f3f3;
+    --swap-hover: #e8e8e8;
+    --label: #334155;
+    --slider-accent: #2968b1;
+    --slider-track: #e1f0fe;
+    color-scheme: light;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+
+    padding: 20px 30px;
+    margin: 8px 0;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 15px;
+    font-size: 14px;
+    color: var(--text);
+
+    h3 {
+        font-size: 16px;
+        font-weight: 600;
+    }
+}
+
+.my-injected-element[data-theme="dark"] {
+    --card-bg: #000000;
+    --card-border: #1a1a1a;
+    --text: #e6eaf0;
+    --muted: #b0b0b0;
+    --divider: #343434;
+    --btn-bg: #000000;
+    --btn-border: #3e3e3e;
+    --btn-text: #e3e3e3;
+    --btn-hover-bg: #000000;
+    --btn-hover-text: #ffffff;
+    --btn-hover-border: #4fa7fc;
+    --swap-bg: #000000;
+    --swap-hover: #232323;
+    --label: #b8c2d0;
+    --slider-accent: #5c95d7;
+    --slider-track: #041321;
+    color-scheme: dark;
+}
+
+.meta-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px; // スライダー群と生成ボタンの間隔（縦に積むときは縦の間隔にもなる）
+
+    // 生成・停止ボタンは縮めず、文字も折り返さない
+    #generate_btn,
+    #generate_one_btn,
+    #stop_btn {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+    .generates {
+        display: flex;
+        align-items: center;
+
+        p {
+            margin: 0;
+            padding: 5px 10px 8px;
+            margin-right: 12px;
+            border-right: 4px solid var(--divider);
+            max-width: 32em;
+            overflow-wrap: anywhere;
+            font-size: 16px;
+            color: var(--muted);
+            transition: border-color 0.25s ease; // 色がじんわり変わる
+        }
+
+        // 「生成できます」の状態では棒もテキストも表示しない
+        &[data-state="ready"] p {
+            display: none;
+        }
+
+        // 状態ごとのボーダー色（idle はグレーのまま）
+        &[data-state="queued"] p {
+            border-right-color: #3fc720;
+        }
+
+        &[data-state="started"] p {
+            border-right-color: #2066c7;
+        }
+
+        &[data-state="noServer"] p,
+        &[data-state="error"] p {
+            border-right-color: #fa3838;
+        }
+
+        &[data-state="stopped"] p {
+            border-right-color: #e0a020;
+        }
+
+        button {
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--btn-bg);
+            border: var(--btn-border) solid 2px;
+            color: var(--btn-text);
+            padding: 10px 50px;
+            font-weight: 700;
+            border-radius: 10000px;
+            font-size: 20px;
+            transition: 0.1s;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: var(--btn-hover-bg);
+            border-color: var(--btn-hover-border);
+            color: var(--btn-hover-text);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        // 停止ボタン・1枚だけ生成ボタン: 生成ボタンの左に並べる。少し小さめにする
+        #stop_btn,
+        #generate_one_btn {
+            padding: 10px 32px;
+            margin-right: 12px;
+        }
+
+        #stop_btn:hover:not(:disabled) {
+            border-color: #fa3838;
+        }
+    }
+}
+
+.meta-data-container {
+    display: flex;
+    flex-wrap: wrap; // 幅が足りないときは折り返す
+    justify-content: left;
+    gap: 12px;
+
+    // width と height を入れ替えるボタン
+    .swap-button {
+        align-self: flex-start;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        margin-top: -4px; // スライダー（高さ24px）の縦中央に合わせる
+        padding: 0;
+        border: none;
+        border-radius: 8px;
+        background: var(--swap-bg);
+        color: var(--text);
+        cursor: pointer;
+
+        &:hover {
+            background: var(--swap-hover);
+        }
+    }
+
+    .meta-data-item {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+
+        input {
+            border: black 1px solid;
+        }
+
+        // スライダー（上にスライダー、下の行にラベルと現在値）
+        &[data-slider] {
+            width: 240px;
+            align-items: stretch;
+
+            .slider-range {
+                --track-height: 4px; // ★後ろのバー（トラック）の高さ。ここを変更
+                --thumb-size: 16px; // ツマミの大きさ
+                --fill: 50%; // 塗りの長さ（JSが更新する）
+
+                -webkit-appearance: none;
+                appearance: none;
+                width: 100%;
+                height: 24px; // スライダー全体の高さ（ツマミ・トラックより大きくしておく）
+                margin: 0;
+                padding: 0;
+                border: none; // 上の input の枠線をスライダーには付けない
+                background: transparent;
+                cursor: pointer;
+
+                // --- Chrome / Edge / Safari ---
+                &::-webkit-slider-runnable-track {
+                    height: var(--track-height);
+                    border-radius: 999px;
+                    background: linear-gradient(to right,
+                            var(--slider-accent) var(--fill),
+                            var(--slider-track) var(--fill));
+                }
+
+                &::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: var(--thumb-size);
+                    height: var(--thumb-size);
+                    // トラックの縦中央にツマミを合わせる（トラックの高さを変えても自動で追従）
+                    margin-top: calc((var(--track-height) - var(--thumb-size)) / 2);
+                    border: none; // 白い枠なし
+                    border-radius: 50%;
+                    background: var(--slider-accent); // つぶつぶなし
+                    box-shadow: none;
+                }
+
+                // --- Firefox ---
+                &::-moz-range-track {
+                    height: var(--track-height);
+                    border-radius: 999px;
+                    background: var(--slider-track);
+                }
+
+                &::-moz-range-progress {
+                    height: var(--track-height);
+                    border-radius: 999px;
+                    background: var(--slider-accent);
+                }
+
+                &::-moz-range-thumb {
+                    width: var(--thumb-size);
+                    height: var(--thumb-size);
+                    border: none;
+                    border-radius: 50%;
+                    background: var(--slider-accent);
+                    box-shadow: none;
+                }
+            }
+
+            // ラベル（左）と現在値（右）
+            .slider-label-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                margin-top: 4px;
+                color: var(--label);
+
+                .slider-label {
+                    font-weight: 700;
+                }
+
+                .slider-value {
+                    font-weight: 400;
+                }
+            }
+        }
+
+        &[data-slider].nums-of-gen {
+            width: 150px;
+            border-left: var(--divider) 5px solid;
+            padding-left: 20px;
+            margin-left: 10px;
+        }
+    }
+}
+
+// ===== レスポンシブ =====
+
+// 〜1100px：生成ボタンをスライダー群の下に移し、横幅いっぱいにする
+.aspect-select {
+    align-self: flex-start;
+    box-sizing: border-box;
+    height: 32px;
+    margin-top: -4px;
+    padding: 0 28px 0 12px;
+    border: 1px solid var(--btn-border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+
+    &:focus {
+        outline: none;
+        border-color: var(--btn-hover-border);
+    }
+}
+
+.replace-container {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--divider);
+
+    input {
+        box-sizing: border-box;
+        flex: 1 1 160px;
+        min-width: 0;
+        max-width: 280px;
+        padding: 8px 12px;
+        border: 1px solid var(--btn-border);
+        border-radius: 8px;
+        background: var(--card-bg);
+        color: var(--text);
+        font-size: 14px;
+
+        &:focus {
+            outline: none;
+            border-color: var(--btn-hover-border);
+        }
+    }
+
+    .replace-arrow {
+        flex-shrink: 0;
+        color: var(--muted);
+    }
+
+    #replace_btn {
+        flex-shrink: 0;
+        padding: 8px 24px;
+        border: var(--btn-border) solid 2px;
+        border-radius: 10000px;
+        background: var(--btn-bg);
+        color: var(--btn-text);
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: 0.1s;
+
+        &:hover:not(:disabled) {
+            background-color: var(--btn-hover-bg);
+            border-color: var(--btn-hover-border);
+            color: var(--btn-hover-text);
+        }
+
+        &:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+    }
+
+    .replace-result {
+        color: var(--muted);
+    }
+}
+
+@media (max-width: 1100px) {
+    .meta-container {
+        flex-direction: column;
+
+        #generate_btn {
+            // ホスト側(DeepL)の box-sizing: border-box を引き継ぐと、
+            // width を固定した場合にパディング分だけ文字を収める余白が削られ、
+            // 「生成」の文字が中央からずれて見えてしまう。
+            // 最小幅として扱うことで、パディング込みの自然な幅を確保しつつ中央揃えを保つ。
+            min-width: 132px;
+            width: auto;
+        }
+    }
+}
+
+// 〜860px：スライダーを1列に縦積みする
+@media (max-width: 900px) {
+    .aspect-select {
+        align-self: stretch;
+        margin-top: 0;
+    }
+
+    .meta-data-container {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        gap: 16px;
+
+        // 縦に並ぶので、入れ替えボタンは中央に置き、矢印を縦向き（⇅）にする
+        .swap-button {
+            align-self: center;
+            margin-top: 0;
+
+            svg {
+                transform: rotate(90deg);
+            }
+        }
+
+        .meta-data-item {
+            &[data-slider] {
+                width: 100%;
+            }
+
+            // 生成枚数：左の縦線をやめて、上に区切り線を出す
+            &[data-slider].nums-of-gen {
+                width: 100%;
+                border-left: none;
+                border-top: var(--divider) 3px solid;
+                padding-left: 0;
+                padding-top: 16px;
+                margin-left: 0;
+            }
+        }
+    }
+}
+
+// 〜600px：余白を詰め、生成ボタンも小さくする
+@media (max-width: 600px) {
+    .my-injected-element {
+        padding: 16px;
+    }
+
+    .meta-container {
+        gap: 16px;
+
+        #generate_btn {
+            padding: 10px 24px;
+            font-size: 18px;
+        }
+
+        .generates #stop_btn,
+        .generates #generate_one_btn {
+            padding: 10px 16px;
+            font-size: 18px;
+            margin-right: 8px;
+        }
+    }
+}
+
+.my-glow-overlay {
+  --glow-color: 41, 104, 177; // 既存スライダーの青に合わせています
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow:
+    inset 0 0 50px 8px rgba(var(--glow-color), 0.55),
+    inset 0 0 160px 24px rgba(var(--glow-color), 0.25);
+}
+.my-glow-overlay[data-kind="error"] {
+  --glow-color: 250, 56, 56;
+}
+.my-glow-overlay.is-active {
+  animation: my-glow-pulse 1.2s ease-out;
+}
+
+@keyframes my-glow-pulse {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .my-glow-overlay.is-active {
+    animation-duration: 0.4s;
+  }
+}
