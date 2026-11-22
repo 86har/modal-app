@@ -1,0 +1,411 @@
+import json
+import os
+import shutil
+import sys
+import threading
+import time
+import webbrowser
+from pathlib import Path
+
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+BASE_DIR = Path(__file__).resolve().parent
+
+HOST = "127.0.0.1"
+VIEWER_PORT = 5000
+
+# 日本語プロンプトの保存先（gen_1.py と同じ階層 = このファイルの親フォルダ）
+PROMPT_DIR = BASE_DIR.parent / "output_prompts"
+
+# config.json の場所。run.bat が環境変数 KREA_CONFIG で渡す。
+# （viewer.py を単体で起動した場合は、ルートフォルダ = engine の一つ上にあるものとする）
+CONFIG_PATH = Path(os.environ.get("KREA_CONFIG") or (BASE_DIR.parent.parent.parent / "config.json"))
+
+DEFAULT_WATCH_DIR = BASE_DIR.parent / "output_images"
+
+def load_watch_dir() -> Path:
+    # config.json の WATCH_DIR を優先する。読み取れない／未設定の場合は既定のフォルダを使う
+    if not CONFIG_PATH.is_file():
+        return DEFAULT_WATCH_DIR
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"[viewer] config.json を読み取れませんでした。既定のフォルダを使用します: {e}")
+        return DEFAULT_WATCH_DIR
+    watch_dir = data.get("WATCH_DIR") if isinstance(data, dict) else None
+    if not watch_dir:
+        return DEFAULT_WATCH_DIR
+    return Path(watch_dir)
+
+WATCH_DIR = load_watch_dir()
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+GRACE_SECONDS = 2.0
+NO_CONNECT_TIMEOUT = 120
+PING_INTERVAL = 0.5
+
+SETTLE_SECONDS = 1.0
+
+# お気に入り画像の保存先フォルダ（設定はこのファイルに永続化する）
+FAVORITE_CONFIG_PATH = BASE_DIR / "favorite_config.json"
+
+viewer_app = Flask(
+    __name__,
+    template_folder=str(BASE_DIR / "templates"),
+    static_folder=str(BASE_DIR / "static"),
+)
+
+current_image = {"name": None}
+viewer_lock = threading.Lock()
+new_image_event = threading.Event()
+
+favorite_lock = threading.Lock()
+favorite_folder = {"path": None}
+
+def load_favorite_folder():
+    try:
+        with open(FAVORITE_CONFIG_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    folder = data.get("folder") if isinstance(data, dict) else None
+    if folder and os.path.isdir(folder):
+        return folder
+    return None
+
+def persist_favorite_folder(folder):
+    try:
+        with open(FAVORITE_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump({"folder": folder}, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+def ask_directory_dialog():
+    # ネイティブのフォルダ選択ダイアログを表示する（tkinter使用）
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError:
+        return None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        folder = filedialog.askdirectory(title="お気に入り画像の保存先を選択")
+        root.destroy()
+    except Exception:
+        return None
+    return folder or None
+
+def unique_dest_path(folder, filename):
+    base, ext = os.path.splitext(filename)
+    dest = os.path.join(folder, filename)
+    i = 1
+    while os.path.exists(dest):
+        dest = os.path.join(folder, f"{base}_{i}{ext}")
+        i += 1
+    return dest
+
+def favorite_name_set():
+    # お気に入りフォルダ内の画像ファイル名の集合
+    with favorite_lock:
+        folder = favorite_folder["path"]
+    if not folder or not os.path.isdir(folder):
+        return set()
+    try:
+        return {
+            f for f in os.listdir(folder)
+            if is_image(f) and os.path.isfile(os.path.join(folder, f))
+        }
+    except OSError:
+        return set()
+
+def is_image(filename: str) -> bool:
+    return os.path.splitext(filename)[1].lower() in IMAGE_EXTS
+
+def list_images():
+    try:
+        files = [
+            f for f in os.listdir(WATCH_DIR)
+            if is_image(f) and os.path.isfile(os.path.join(WATCH_DIR, f))
+        ]
+    except FileNotFoundError:
+        return []
+    files.sort(key=lambda f: os.path.getmtime(os.path.join(WATCH_DIR, f)), reverse=True)
+    return files
+
+def get_latest_image():
+    files = list_images()
+    return files[0] if files else None
+
+class NewImageHandler(FileSystemEventHandler):
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        filename = os.path.basename(event.src_path)
+        if not is_image(filename):
+            return
+        time.sleep(0.5)
+        with viewer_lock:
+            current_image["name"] = filename
+        new_image_event.set()
+
+@viewer_app.route("/")
+def index():
+    return render_template("index.html", ts=int(time.time()))
+
+@viewer_app.route("/image")
+def image():
+    with viewer_lock:
+        name = current_image["name"]
+    if name is None:
+        return "画像が見つかりません", 404
+    return send_from_directory(WATCH_DIR, name)
+
+@viewer_app.route("/image/<path:filename>")
+def image_by_name(filename):
+    name = os.path.basename(filename)
+    if not name or not is_image(name):
+        return "不正なファイル名です", 400
+    if not os.path.isfile(os.path.join(WATCH_DIR, name)):
+        return "画像が見つかりません", 404
+    return send_from_directory(WATCH_DIR, name)
+
+@viewer_app.route("/prompt/<path:filename>")
+def prompt_by_name(filename):
+    name = os.path.basename(filename)
+    if not name or not is_image(name):
+        return jsonify({"error": "不正なファイル名です"}), 400
+    path = PROMPT_DIR / (os.path.splitext(name)[0] + ".json")
+    if not path.is_file():
+        return jsonify({"error": "プロンプトが見つかりません"}), 404
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return jsonify({"error": "プロンプトを読み取れませんでした"}), 500
+    prompt = data.get("prompt") if isinstance(data, dict) else None
+    if not isinstance(prompt, str):
+        return jsonify({"error": "プロンプトが見つかりません"}), 404
+    return jsonify({"prompt": prompt})
+
+@viewer_app.route("/images")
+def images():
+    favorites = favorite_name_set()
+    result = []
+    for name in list_images():
+        try:
+            stat = os.stat(os.path.join(WATCH_DIR, name))
+        except OSError:
+            continue
+        result.append({
+            "name": name,
+            "size": stat.st_size,
+            "mtime": stat.st_mtime,
+            "favorite": name in favorites,
+        })
+    return jsonify({"images": result})
+
+@viewer_app.route("/favorite/images")
+def favorite_images():
+    with favorite_lock:
+        folder = favorite_folder["path"]
+    result = []
+    if folder and os.path.isdir(folder):
+        try:
+            names = [
+                f for f in os.listdir(folder)
+                if is_image(f) and os.path.isfile(os.path.join(folder, f))
+            ]
+        except OSError:
+            names = []
+        for name in names:
+            try:
+                stat = os.stat(os.path.join(folder, name))
+            except OSError:
+                continue
+            result.append({"name": name, "size": stat.st_size, "mtime": stat.st_mtime, "favorite": True})
+        result.sort(key=lambda item: item["mtime"], reverse=True)
+    return jsonify({"images": result})
+
+@viewer_app.route("/favorite/image/<path:filename>")
+def favorite_image_by_name(filename):
+    name = os.path.basename(filename)
+    if not name or not is_image(name):
+        return "不正なファイル名です", 400
+    with favorite_lock:
+        folder = favorite_folder["path"]
+    if not folder or not os.path.isdir(folder):
+        return "保存先フォルダが設定されていません", 404
+    if not os.path.isfile(os.path.join(folder, name)):
+        return "画像が見つかりません", 404
+    return send_from_directory(folder, name)
+
+@viewer_app.route("/favorite/folder", methods=["GET", "POST"])
+def favorite_folder_route():
+    if request.method == "POST":
+        # キャンセル時やダイアログが使えない環境では None が返り、設定は変更しない
+        folder = ask_directory_dialog()
+        if folder:
+            with favorite_lock:
+                favorite_folder["path"] = folder
+            persist_favorite_folder(folder)
+    with favorite_lock:
+        return jsonify({"folder": favorite_folder["path"]})
+
+@viewer_app.route("/favorite/save", methods=["POST"])
+def favorite_save():
+    data = request.get_json(silent=True) or {}
+    name = data.get("name")
+    if not isinstance(name, str) or not is_image(name):
+        return jsonify({"error": "不正なファイル名です"}), 400
+    name = os.path.basename(name)
+    src = os.path.join(WATCH_DIR, name)
+    if not os.path.isfile(src):
+        return jsonify({"error": "画像が見つかりません"}), 404
+
+    with favorite_lock:
+        folder = favorite_folder["path"]
+    if not folder:
+        return jsonify({"error": "保存先が設定されていません"}), 400
+    if not os.path.isdir(folder):
+        return jsonify({"error": "保存先フォルダが見つかりません"}), 400
+
+    dest = unique_dest_path(folder, name)
+    try:
+        shutil.copy2(src, dest)
+    except OSError:
+        return jsonify({"error": "保存に失敗しました"}), 500
+    return jsonify({"saved": True, "path": dest})
+
+@viewer_app.route("/favorite/delete", methods=["POST"])
+def favorite_delete():
+    # お気に入りフォルダ内のファイルだけを削除する（元画像 output_images 側は触らない）
+    data = request.get_json(silent=True) or {}
+    name = data.get("name")
+    if not isinstance(name, str) or not is_image(name):
+        return jsonify({"error": "不正なファイル名です"}), 400
+    name = os.path.basename(name)
+
+    with favorite_lock:
+        folder = favorite_folder["path"]
+    if not folder:
+        return jsonify({"error": "保存先が設定されていません"}), 400
+    if not os.path.isdir(folder):
+        return jsonify({"error": "保存先フォルダが見つかりません"}), 400
+
+    target = os.path.join(folder, name)
+    if not os.path.isfile(target):
+        return jsonify({"error": "お気に入りに画像がありません"}), 404
+    try:
+        os.remove(target)
+    except OSError:
+        return jsonify({"error": "削除に失敗しました"}), 500
+    return jsonify({"deleted": True})
+
+@viewer_app.route("/wait")
+def wait():
+    triggered = new_image_event.wait(timeout=30)
+    if triggered:
+
+        while True:
+            new_image_event.clear()
+            if not new_image_event.wait(timeout=SETTLE_SECONDS):
+                break
+    return jsonify({"updated": triggered})
+
+_state_lock = threading.Lock()
+_conns = 0
+_ever_connected = False
+_zero_since = None
+
+def _conn_opened():
+    global _conns, _ever_connected, _zero_since
+    with _state_lock:
+        _conns += 1
+        _ever_connected = True
+        _zero_since = None
+
+def _conn_closed():
+    global _conns, _zero_since
+    with _state_lock:
+        _conns -= 1
+        if _conns <= 0:
+            _conns = 0
+            _zero_since = time.time()
+
+@viewer_app.route("/_alive")
+def alive():
+    def stream():
+        _conn_opened()
+        try:
+            yield "retry: 1000\n\n"
+            while True:
+                time.sleep(PING_INTERVAL)
+                yield ": ping\n\n"
+        finally:
+            _conn_closed()
+
+    return Response(
+        stream(), mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+_ALIVE_SNIPPET = "<script>new EventSource('/_alive');</script>"
+
+@viewer_app.after_request
+def inject_alive_script(resp):
+    if request.path == "/" and resp.mimetype == "text/html":
+        html = resp.get_data(as_text=True)
+        if "</body>" in html:
+            html = html.replace("</body>", _ALIVE_SNIPPET + "</body>", 1)
+        else:
+            html += _ALIVE_SNIPPET
+        resp.set_data(html)
+    return resp
+
+def _watchdog(observer):
+    started = time.time()
+    while True:
+        time.sleep(0.25)
+        with _state_lock:
+            closed = (
+                _ever_connected and _conns == 0
+                and _zero_since is not None
+                and time.time() - _zero_since >= GRACE_SECONDS
+            )
+            never_opened = (not _ever_connected) and time.time() - started >= NO_CONNECT_TIMEOUT
+        if closed or never_opened:
+            print("[viewer] ウィンドウが閉じられたため終了します" if closed
+                  else "[viewer] 一定時間ページが開かれなかったため終了します")
+            if observer is not None:
+                observer.stop()
+            os._exit(0)
+
+def main():
+    observer = None
+    if not os.path.isdir(WATCH_DIR):
+        print(f"[viewer] フォルダが見つかりません: {WATCH_DIR}")
+        sys.exit(1)
+
+    with favorite_lock:
+        favorite_folder["path"] = load_favorite_folder()
+
+    current_image["name"] = get_latest_image()
+    if current_image["name"] is None:
+        print(f"[viewer] フォルダ内に画像が見つかりません: {WATCH_DIR}")
+
+    observer = Observer()
+    observer.schedule(NewImageHandler(), str(WATCH_DIR), recursive=False)
+    observer.start()
+
+    threading.Thread(target=_watchdog, args=(observer,), daemon=True).start()
+    threading.Timer(1.0, lambda: webbrowser.open_new(f"http://{HOST}:{VIEWER_PORT}/")).start()
+
+    print(f"[viewer] http://{HOST}:{VIEWER_PORT}/ で画像ビューアを起動しました")
+    viewer_app.run(host=HOST, port=VIEWER_PORT, debug=False, use_reloader=False, threaded=True)
+
+if __name__ == "__main__":
+    main()

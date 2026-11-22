@@ -11,6 +11,15 @@ html .my-glow-overlay {
   filter: invert(1) hue-rotate(180deg) !important;
 }
 
+
+// =====================================================================
+// レスポンシブ方針
+//  1) 画面幅(viewport)ではなく「カード自身の幅」で切り替える（コンテナクエリ）。
+//     DeepL側のレイアウト（サイドバーの開閉・ウィンドウ幅）でカード幅は変わるため。
+//  2) 固定幅(px)をやめ、flex / grid / clamp() で連続的に伸縮させる。
+//  3) タッチ操作(pointer: coarse)ではタップ領域を大きくし、hover はマウス時のみ。
+// =====================================================================
+
 .my-injected-element {
     --card-bg: #ffffff;
     --card-border: #e5e5e5;
@@ -28,13 +37,26 @@ html .my-glow-overlay {
     --label: #334155;
     --slider-accent: #2968b1;
     --slider-track: #e1f0fe;
+
+    // コントロールの高さ。スライダー高さとの差から縦位置の補正量を自動計算する
+    --ctl-h: 32px; // セレクト・入れ替えボタンの高さ
+    --slider-h: 24px; // スライダー全体の高さ
+    --thumb-size: 16px;
+
     color-scheme: light;
     font-family: inherit;
     font-size: inherit;
     line-height: inherit;
     color: inherit;
 
-    padding: 20px 30px;
+    // カード自身の幅を基準にコンテナクエリを使う
+    // （inline-size containment は固有幅を 0 にするため、width: 100% を必ず付ける）
+    container: gen / inline-size;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+
+    padding: 20px clamp(16px, 3vw, 30px);
     margin: 8px 0;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
@@ -68,10 +90,23 @@ html .my-glow-overlay {
     color-scheme: dark;
 }
 
+
+// タッチ端末：タップしやすい大きさにする
+@media (pointer: coarse) {
+    .my-injected-element {
+        --ctl-h: 44px;
+        --slider-h: 32px;
+        --thumb-size: 22px;
+    }
+}
+
+// ----- 生成ボタンまわり -----
 .meta-container {
     display: flex;
+    flex-wrap: wrap; // 幅が足りなければ、生成ボタン群が自然に下の行へ回る
     justify-content: space-between;
-    gap: 24px; // スライダー群と生成ボタンの間隔（縦に積むときは縦の間隔にもなる）
+    gap: 16px 24px; // 縦 / 横
+    min-width: 0;
 
     // 生成・停止ボタンは縮めず、文字も折り返さない
     #generate_btn,
@@ -81,15 +116,23 @@ html .my-glow-overlay {
         white-space: nowrap;
     }
 
+    // スライダー群：残り幅をすべて使い、足りなくなったら .generates を下へ押し出す
+    .meta-data-container {
+        flex: 1 1 520px;
+        min-width: 0;
+    }
+
     .generates {
+        --state-color: var(--divider);
         display: flex;
         align-items: center;
+        gap: 12px;
+        flex: 0 0 auto;
 
         p {
             margin: 0;
             padding: 5px 10px 8px;
-            margin-right: 12px;
-            border-right: 4px solid var(--divider);
+            border-right: 4px solid var(--state-color);
             max-width: 32em;
             overflow-wrap: anywhere;
             font-size: 16px;
@@ -103,21 +146,21 @@ html .my-glow-overlay {
         }
 
         // 状態ごとのボーダー色（idle はグレーのまま）
-        &[data-state="queued"] p {
-            border-right-color: #3fc720;
+        &[data-state="queued"] {
+            --state-color: #3fc720;
         }
 
-        &[data-state="started"] p {
-            border-right-color: #2066c7;
+        &[data-state="started"] {
+            --state-color: #2066c7;
         }
 
-        &[data-state="noServer"] p,
-        &[data-state="error"] p {
-            border-right-color: #fa3838;
+        &[data-state="noServer"],
+        &[data-state="error"] {
+            --state-color: #fa3838;
         }
 
-        &[data-state="stopped"] p {
-            border-right-color: #e0a020;
+        &[data-state="stopped"] {
+            --state-color: #e0a020;
         }
 
         button {
@@ -125,20 +168,28 @@ html .my-glow-overlay {
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            min-height: var(--ctl-h);
             background-color: var(--btn-bg);
             border: var(--btn-border) solid 2px;
             color: var(--btn-text);
-            padding: 10px 50px;
+            // 左右の余白と文字サイズを、カード幅に応じて連続的に変える
+            padding: 10px clamp(16px, 5cqi, 50px);
             font-weight: 700;
             border-radius: 10000px;
-            font-size: 20px;
+            font-size: clamp(16px, 2.2cqi, 20px);
             transition: 0.1s;
         }
 
-        button:hover:not(:disabled) {
-            background-color: var(--btn-hover-bg);
-            border-color: var(--btn-hover-border);
-            color: var(--btn-hover-text);
+        @media (hover: hover) {
+            button:hover:not(:disabled) {
+                background-color: var(--btn-hover-bg);
+                border-color: var(--btn-hover-border);
+                color: var(--btn-hover-text);
+            }
+
+            #stop_btn:hover:not(:disabled) {
+                border-color: #fa3838;
+            }
         }
 
         button:disabled {
@@ -149,31 +200,28 @@ html .my-glow-overlay {
         // 停止ボタン・1枚だけ生成ボタン: 生成ボタンの左に並べる。少し小さめにする
         #stop_btn,
         #generate_one_btn {
-            padding: 10px 32px;
-            margin-right: 12px;
-        }
-
-        #stop_btn:hover:not(:disabled) {
-            border-color: #fa3838;
+            padding-inline: clamp(12px, 3.2cqi, 32px);
         }
     }
 }
 
+// ----- スライダー群 -----
 .meta-data-container {
     display: flex;
     flex-wrap: wrap; // 幅が足りないときは折り返す
-    justify-content: left;
+    justify-content: flex-start;
     gap: 12px;
 
     // width と height を入れ替えるボタン
     .swap-button {
         align-self: flex-start;
+        flex: 0 0 auto;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 32px;
-        height: 32px;
-        margin-top: -4px; // スライダー（高さ24px）の縦中央に合わせる
+        width: var(--ctl-h);
+        height: var(--ctl-h);
+        margin-top: calc((var(--slider-h) - var(--ctl-h)) / 2); // スライダーの縦中央に合わせる
         padding: 0;
         border: none;
         border-radius: 8px;
@@ -181,8 +229,10 @@ html .my-glow-overlay {
         color: var(--text);
         cursor: pointer;
 
-        &:hover {
-            background: var(--swap-hover);
+        @media (hover: hover) {
+            &:hover {
+                background: var(--swap-hover);
+            }
         }
     }
 
@@ -197,18 +247,20 @@ html .my-glow-overlay {
 
         // スライダー（上にスライダー、下の行にラベルと現在値）
         &[data-slider] {
-            width: 240px;
+            // 固定 240px をやめ、240px を基準に 160〜320px の範囲で伸縮する
+            flex: 1 1 240px;
+            min-width: 160px;
+            max-width: 320px;
             align-items: stretch;
 
             .slider-range {
                 --track-height: 4px; // ★後ろのバー（トラック）の高さ。ここを変更
-                --thumb-size: 16px; // ツマミの大きさ
                 --fill: 50%; // 塗りの長さ（JSが更新する）
 
                 -webkit-appearance: none;
                 appearance: none;
                 width: 100%;
-                height: 24px; // スライダー全体の高さ（ツマミ・トラックより大きくしておく）
+                height: var(--slider-h); // スライダー全体の高さ（ツマミ・トラックより大きくしておく）
                 margin: 0;
                 padding: 0;
                 border: none; // 上の input の枠線をスライダーには付けない
@@ -265,6 +317,7 @@ html .my-glow-overlay {
                 display: flex;
                 justify-content: space-between;
                 align-items: baseline;
+                gap: 8px;
                 margin-top: 4px;
                 color: var(--label);
 
@@ -274,12 +327,15 @@ html .my-glow-overlay {
 
                 .slider-value {
                     font-weight: 400;
+                    white-space: nowrap;
                 }
             }
         }
 
+        // 生成枚数：左に縦線。幅は小さめで固定気味
         &[data-slider].nums-of-gen {
-            width: 150px;
+            flex: 0 1 150px;
+            min-width: 120px;
             border-left: var(--divider) 5px solid;
             padding-left: 20px;
             margin-left: 10px;
@@ -287,14 +343,13 @@ html .my-glow-overlay {
     }
 }
 
-// ===== レスポンシブ =====
-
-// 〜1100px：生成ボタンをスライダー群の下に移し、横幅いっぱいにする
 .aspect-select {
     align-self: flex-start;
+    flex: 0 0 auto;
     box-sizing: border-box;
-    height: 32px;
-    margin-top: -4px;
+    max-width: 100%;
+    height: var(--ctl-h);
+    margin-top: calc((var(--slider-h) - var(--ctl-h)) / 2);
     padding: 0 28px 0 12px;
     border: 1px solid var(--btn-border);
     border-radius: 8px;
@@ -309,6 +364,7 @@ html .my-glow-overlay {
     }
 }
 
+// ----- 置換フォーム -----
 .replace-container {
     display: flex;
     align-items: center;
@@ -323,6 +379,7 @@ html .my-glow-overlay {
         flex: 1 1 160px;
         min-width: 0;
         max-width: 280px;
+        min-height: var(--ctl-h);
         padding: 8px 12px;
         border: 1px solid var(--btn-border);
         border-radius: 8px;
@@ -343,6 +400,7 @@ html .my-glow-overlay {
 
     #replace_btn {
         flex-shrink: 0;
+        min-height: var(--ctl-h);
         padding: 8px 24px;
         border: var(--btn-border) solid 2px;
         border-radius: 10000px;
@@ -353,10 +411,12 @@ html .my-glow-overlay {
         cursor: pointer;
         transition: 0.1s;
 
-        &:hover:not(:disabled) {
-            background-color: var(--btn-hover-bg);
-            border-color: var(--btn-hover-border);
-            color: var(--btn-hover-text);
+        @media (hover: hover) {
+            &:hover:not(:disabled) {
+                background-color: var(--btn-hover-bg);
+                border-color: var(--btn-hover-border);
+                color: var(--btn-hover-text);
+            }
         }
 
         &:disabled {
@@ -367,40 +427,66 @@ html .my-glow-overlay {
 
     .replace-result {
         color: var(--muted);
-    }
-}
+        overflow-wrap: anywhere;
 
-@media (max-width: 1100px) {
-    .meta-container {
-        flex-direction: column;
-
-        #generate_btn {
-            // ホスト側(DeepL)の box-sizing: border-box を引き継ぐと、
-            // width を固定した場合にパディング分だけ文字を収める余白が削られ、
-            // 「生成」の文字が中央からずれて見えてしまう。
-            // 最小幅として扱うことで、パディング込みの自然な幅を確保しつつ中央揃えを保つ。
-            min-width: 132px;
-            width: auto;
+        // 結果が空のときは行を作らない（折り返し時に余計な隙間が出ないように）
+        &:empty {
+            display: none;
         }
     }
 }
 
-// 〜860px：スライダーを1列に縦積みする
-@media (max-width: 900px) {
-    .aspect-select {
-        align-self: stretch;
-        margin-top: 0;
+// =====================================================================
+// コンテナクエリ（カード幅が基準。上ほど広い）
+// =====================================================================
+
+// 〜760px：スライダー群を3列グリッドにする
+//   [ アスペクト比セレクト ]  ← 1行ぶち抜き
+//   [ Width ] [⇄] [ Height ]
+//   [ 生成枚数 ]              ← 1行ぶち抜き、上に区切り線
+@container gen (max-width: 1760px) {
+    .meta-container .meta-data-container {
+        flex-basis: 100%; // 生成ボタン群は必ず下の行へ
+
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        gap: 16px 12px;
+        align-items: start;
+
+        .aspect-select {
+            grid-column: 1 / -1;
+            justify-self: start;
+            margin-top: 0;
+        }
+
+        .meta-data-item[data-slider] {
+            max-width: none;
+            min-width: 0;
+        }
+
+        .meta-data-item[data-slider].nums-of-gen {
+            grid-column: 1 / -1;
+            border-left: none;
+            border-top: var(--divider) 3px solid;
+            padding-left: 0;
+            padding-top: 16px;
+            margin-left: 0;
+        }
     }
 
-    .meta-data-container {
-        flex-direction: column;
-        flex-wrap: nowrap;
-        align-items: stretch;
-        gap: 16px;
+    .meta-container .generates {
+        flex: 1 1 100%;
+    }
+}
+
+// 〜460px：スライダーを1列に縦積みし、生成ボタンを折り返して全幅に伸ばす
+@container gen (max-width: 460px) {
+    .meta-container .meta-data-container {
+        grid-template-columns: minmax(0, 1fr);
 
         // 縦に並ぶので、入れ替えボタンは中央に置き、矢印を縦向き（⇅）にする
         .swap-button {
-            align-self: center;
+            justify-self: center;
             margin-top: 0;
 
             svg {
@@ -408,44 +494,51 @@ html .my-glow-overlay {
             }
         }
 
-        .meta-data-item {
-            &[data-slider] {
-                width: 100%;
-            }
+        .aspect-select {
+            justify-self: stretch;
+        }
+    }
 
-            // 生成枚数：左の縦線をやめて、上に区切り線を出す
-            &[data-slider].nums-of-gen {
-                width: 100%;
-                border-left: none;
-                border-top: var(--divider) 3px solid;
-                padding-left: 0;
-                padding-top: 16px;
-                margin-left: 0;
-            }
+    .meta-container .generates {
+        flex-wrap: wrap;
+        gap: 8px;
+
+        // 状態メッセージは1行ぶち抜き。縦棒は左側に付け替える
+        p {
+            flex: 1 1 100%;
+            max-width: none;
+            border-right: none;
+            border-left: 4px solid var(--state-color);
+        }
+
+        // ボタンは行内で均等に伸ばす
+        button {
+            flex: 1 1 auto;
+        }
+    }
+
+    .replace-container {
+        input {
+            flex-basis: 100%;
+            max-width: none;
+        }
+
+        // 上下に並ぶので矢印も縦向きにして中央へ
+        .replace-arrow {
+            margin-inline: auto;
+            transform: rotate(90deg);
+        }
+
+        #replace_btn {
+            flex: 1 1 auto;
         }
     }
 }
 
-// 〜600px：余白を詰め、生成ボタンも小さくする
-@media (max-width: 600px) {
-    .my-injected-element {
-        padding: 16px;
-    }
-
+// 〜360px：カード自体の余白も詰める
+@container gen (max-width: 360px) {
     .meta-container {
-        gap: 16px;
-
-        #generate_btn {
-            padding: 10px 24px;
-            font-size: 18px;
-        }
-
-        .generates #stop_btn,
-        .generates #generate_one_btn {
-            padding: 10px 16px;
-            font-size: 18px;
-            margin-right: 8px;
-        }
+        gap: 12px;
     }
 }
 
