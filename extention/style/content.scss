@@ -7,7 +7,9 @@ html canvas,
 html iframe,
 html [style*="background-image"],
 html .my-injected-element,
-html .my-glow-overlay {
+html .my-glow-overlay,
+html .my-group-bar,
+html .my-group-popover {
   filter: invert(1) hue-rotate(180deg) !important;
 }
 
@@ -37,11 +39,23 @@ html .my-glow-overlay {
     --label: #334155;
     --slider-accent: #2968b1;
     --slider-track: #e1f0fe;
+    // GPUドロップダウン
+    --dd-bg: #ffffff;
+    --dd-border: #dcdcdc;
+    --dd-trigger-bg: #f1f1f1;
+    --dd-trigger-hover: #e6e6e6;
+    --dd-hover: #f3f3f3;
+    --dd-selected: #e1f0fe;
+    --dd-text: #1c1c1c;
+    --dd-muted: #707070;
+    --dd-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 
     // コントロールの高さ。スライダー高さとの差から縦位置の補正量を自動計算する
     --ctl-h: 32px; // セレクト・入れ替えボタンの高さ
     --slider-h: 24px; // スライダー全体の高さ
     --thumb-size: 16px;
+    --gen-h: 48px; // 生成・停止ボタンの高さ
+    --field-h: 40px; // GPU選択ドロップダウン（トリガー・各行）の高さ
 
     color-scheme: light;
     font-family: inherit;
@@ -70,6 +84,13 @@ html .my-glow-overlay {
     }
 }
 
+// ドロップダウンを開いている間だけ、カード全体を前面に出す。
+// （カードは独立した重なり順の単位になるため、そのままだと後ろに並ぶDeepLのフッター側の要素が上に描かれる）
+.my-injected-element:has(.dd.is-open) {
+    position: relative;
+    z-index: 2147483000;
+}
+
 .my-injected-element[data-theme="dark"] {
     --card-bg: #000000;
     --card-border: #1a1a1a;
@@ -87,6 +108,15 @@ html .my-glow-overlay {
     --label: #b8c2d0;
     --slider-accent: #5c95d7;
     --slider-track: #041321;
+    --dd-bg: #000000;
+    --dd-border: #2a2a2a;
+    --dd-trigger-bg: #1a1a1a;
+    --dd-trigger-hover: #262626;
+    --dd-hover: #1a1a1a;
+    --dd-selected: #0c2238;
+    --dd-text: #e6eaf0;
+    --dd-muted: #8d939c;
+    --dd-shadow: 0 12px 32px rgba(0, 0, 0, 0.75);
     color-scheme: dark;
 }
 
@@ -97,111 +127,82 @@ html .my-glow-overlay {
         --ctl-h: 44px;
         --slider-h: 32px;
         --thumb-size: 22px;
+        --field-h: 44px;
     }
 }
 
-// ----- 生成ボタンまわり -----
+// ----- 状態表示（「翻訳画面に入力してください」など） -----
+// 同じ内容の <p> が2つある。widthやheightの行の右(.status-top)と、GPU選択行の下(.status-bottom)。
+// 広いときは top、積み重ねレイアウトのときは bottom を表示する。
+.generate-status {
+    --state-color: var(--divider);
+    margin: 0;
+    padding: 6px 10px; // 上下のパディング（縦棒の長さにもなる）
+    line-height: 1.5;
+    font-size: 22px; // カード幅が 1400px より広いとき（1400px以下は積み重ねレイアウト側で 16px にする）
+    color: var(--muted);
+    transition: border-color 0.25s ease; // 色がじんわり変わる
+
+    // 文言本体：最大2行。3行以上になるぶんは「…」で省略する
+    // （パディングのある <p> 自身ではなく、中の span で切る。<p> で切ると3行目が余白に覗くため）
+    .status-text {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        overflow-wrap: anywhere;
+    }
+
+    // 「生成できます」の状態では棒もテキストも表示しない
+    &[data-state="ready"] {
+        display: none;
+    }
+
+    // 状態ごとのボーダー色（idle はグレーのまま）
+    &[data-state="queued"] {
+        --state-color: #3fc720;
+    }
+
+    &[data-state="started"] {
+        --state-color: #2066c7;
+    }
+
+    &[data-state="noServer"],
+    &[data-state="error"] {
+        --state-color: #fa3838;
+    }
+
+    &[data-state="stopped"] {
+        --state-color: #e0a020;
+    }
+}
+
+// 見出し(h3)とスライダー行をひとまとめにした領域。
+// 案内文(.status-top)はこの領域の右端に重ねて置き、領域全体（見出し〜スライダー行）の縦中央に合わせる。
+.top-section {
+    position: relative;
+
+    .status-top {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        text-align: right;
+        border-right: 4px solid var(--state-color);
+
+        .status-text {
+            max-width: 16em; // 案内文の幅（22px の文字で 16 文字ぶん＝約352px）
+        }
+    }
+}
+
 .meta-container {
-    display: flex;
-    flex-wrap: wrap; // 幅が足りなければ、生成ボタン群が自然に下の行へ回る
-    justify-content: space-between;
-    gap: 16px 24px; // 縦 / 横
     min-width: 0;
 
-    // 生成・停止ボタンは縮めず、文字も折り返さない
-    #generate_btn,
-    #generate_one_btn,
-    #stop_btn {
-        flex-shrink: 0;
-        white-space: nowrap;
-    }
-
-    // スライダー群：残り幅をすべて使い、足りなくなったら .generates を下へ押し出す
+    // 右端に重ねる案内文（最大約376px）とスライダーがぶつからないよう、右側に余白を空けておく
     .meta-data-container {
-        flex: 1 1 520px;
-        min-width: 0;
-    }
-
-    .generates {
-        --state-color: var(--divider);
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex: 0 0 auto;
-
-        p {
-            margin: 0;
-            padding: 5px 10px 8px;
-            border-right: 4px solid var(--state-color);
-            max-width: 32em;
-            overflow-wrap: anywhere;
-            font-size: 16px;
-            color: var(--muted);
-            transition: border-color 0.25s ease; // 色がじんわり変わる
-        }
-
-        // 「生成できます」の状態では棒もテキストも表示しない
-        &[data-state="ready"] p {
-            display: none;
-        }
-
-        // 状態ごとのボーダー色（idle はグレーのまま）
-        &[data-state="queued"] {
-            --state-color: #3fc720;
-        }
-
-        &[data-state="started"] {
-            --state-color: #2066c7;
-        }
-
-        &[data-state="noServer"],
-        &[data-state="error"] {
-            --state-color: #fa3838;
-        }
-
-        &[data-state="stopped"] {
-            --state-color: #e0a020;
-        }
-
-        button {
-            box-sizing: border-box;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-height: var(--ctl-h);
-            background-color: var(--btn-bg);
-            border: var(--btn-border) solid 2px;
-            color: var(--btn-text);
-            // 左右の余白と文字サイズを、カード幅に応じて連続的に変える
-            padding: 10px clamp(16px, 5cqi, 50px);
-            font-weight: 700;
-            border-radius: 10000px;
-            font-size: clamp(16px, 2.2cqi, 20px);
-            transition: 0.1s;
-        }
-
-        @media (hover: hover) {
-            button:hover:not(:disabled) {
-                background-color: var(--btn-hover-bg);
-                border-color: var(--btn-hover-border);
-                color: var(--btn-hover-text);
-            }
-
-            #stop_btn:hover:not(:disabled) {
-                border-color: #fa3838;
-            }
-        }
-
-        button:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        // 停止ボタン・1枚だけ生成ボタン: 生成ボタンの左に並べる。少し小さめにする
-        #stop_btn,
-        #generate_one_btn {
-            padding-inline: clamp(12px, 3.2cqi, 32px);
-        }
+        padding-right: 380px;
     }
 }
 
@@ -343,117 +344,314 @@ html .my-glow-overlay {
     }
 }
 
-.aspect-select {
-    align-self: flex-start;
-    flex: 0 0 auto;
-    box-sizing: border-box;
-    max-width: 100%;
-    height: var(--ctl-h);
-    margin-top: calc((var(--slider-h) - var(--ctl-h)) / 2);
-    padding: 0 28px 0 12px;
-    border: 1px solid var(--btn-border);
-    border-radius: 8px;
-    background: var(--card-bg);
-    color: var(--text);
-    font-size: 14px;
-    cursor: pointer;
+// ----- ドロップダウン共通（DeepLの言語選択風：黒基調）。GPU選択・アスペクト比選択で使う -----
+.dd {
+    position: relative;
+    flex: 0 1 auto;
+    min-width: 0;
 
-    &:focus {
-        outline: none;
-        border-color: var(--btn-hover-border);
+    .dd-trigger {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        max-width: 100%;
+        height: var(--field-h);
+        padding: 0 12px 0 14px;
+        border: none;
+        border-radius: 8px;
+        background: var(--dd-trigger-bg);
+        color: var(--dd-text);
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.1s;
+
+        @media (hover: hover) {
+            &:hover {
+                background: var(--dd-trigger-hover);
+            }
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--btn-hover-border);
+            outline-offset: 2px;
+        }
+
+        .dd-trigger-label {
+            color: var(--dd-muted);
+        }
+
+        .dd-trigger-value {
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .dd-trigger-price {
+            color: var(--dd-muted);
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .dd-chevron {
+            flex: 0 0 auto;
+            transition: transform 0.15s;
+        }
+    }
+
+    &.is-open .dd-chevron {
+        transform: rotate(180deg); // 開いているときは ⌃
+    }
+
+    .dd-menu {
+        position: absolute;
+        left: 0;
+        top: calc(100% + 8px);
+        z-index: 20;
+        box-sizing: border-box;
+        width: max-content;
+        min-width: 100%;
+        max-width: min(560px, 100cqi);
+        padding: 8px 0;
+        background: var(--dd-bg);
+        border: 1px solid var(--dd-border);
+        border-radius: 8px;
+        box-shadow: var(--dd-shadow);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: #555 transparent;
+
+        &[hidden] {
+            display: none;
+        }
+    }
+
+    // 下に収まらないときは上向きに開く（JSが .is-up を付ける）
+    &.is-up .dd-menu {
+        top: auto;
+        bottom: calc(100% + 8px);
+    }
+
+    // GPU選択：見出し行と各行は同じ4列グリッド（GPU名 / $/秒 / $/時間 / $30で稼働）
+    .gpu-head,
+    &.gpu-select .dd-option {
+        display: grid;
+        grid-template-columns: minmax(150px, 1fr) 84px 64px 84px;
+        align-items: center;
+        column-gap: 16px;
+        padding: 0 20px;
+    }
+
+    // アスペクト比選択：1列（比のみ）
+    &.aspect-dd .dd-option {
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+    }
+
+    .gpu-head {
+        height: 28px;
+        margin-bottom: 4px;
+        border-bottom: 1px solid var(--dd-border);
+        color: var(--dd-muted);
+        font-size: 12px;
+    }
+
+    .dd-option {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: var(--field-h);
+        border: none;
+        background: transparent;
+        color: var(--dd-text);
+        font-size: 14px;
+        text-align: left;
+        cursor: pointer;
+
+        @media (hover: hover) {
+            &:hover {
+                background: var(--dd-hover);
+            }
+        }
+
+        &:focus-visible {
+            outline: none;
+            background: var(--dd-hover);
+        }
+
+        &[aria-selected="true"] {
+            background: var(--dd-selected);
+            font-weight: 700;
+        }
+
+        .gpu-name {
+            white-space: nowrap;
+        }
+
+        .gpu-num {
+            color: var(--dd-muted);
+        }
+
+        .gpu-hour {
+            color: var(--dd-text);
+        }
+    }
+
+    .gpu-num {
+        text-align: right;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
     }
 }
 
-// ----- 置換フォーム -----
-.replace-container {
+// ----- アスペクト比ドロップダウン（左: 比の一覧 / 右: その比の実際の形） -----
+.aspect-dd {
+    align-self: flex-start;
+    flex: 0 0 auto;
+    margin-top: calc((var(--slider-h) - var(--ctl-h)) / 2); // スライダーの縦中央に合わせる
+
+    .dd-trigger {
+        height: var(--ctl-h);
+    }
+
+    .aspect-body {
+        display: flex;
+        align-items: stretch;
+    }
+
+    .dd-list {
+        flex: 0 0 auto;
+        min-width: 132px;
+    }
+
+    // 右側：四角形を置くステージ（四角形は中央に置く）
+    .aspect-preview {
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        width: calc(var(--aspect-box, 132px) + 52px);
+        border-left: 1px solid var(--dd-border);
+    }
+
+    // その比の実際の形。width / height を JS が変えると、ぬるっと変形する
+    .aspect-rect {
+        display: grid;
+        place-items: center;
+        box-sizing: border-box;
+        width: var(--aspect-box, 132px);
+        height: var(--aspect-box, 132px);
+        overflow: hidden;
+        border: 2px solid var(--slider-accent);
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--slider-accent) 20%, transparent);
+        color: var(--dd-text);
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+        // 幅・高さが変わるときのアニメーションは JS（ASPECT_PREVIEW）が動かす
+    }
+}
+
+// ----- GPU選択 ＋ 生成ボタン群（同じ行に並べる） -----
+//   [GPU ▾]                                  翻訳画面に入力してください
+//                                        [停止] [1枚だけ生成] [生成]
+.action-container {
     display: flex;
-    align-items: center;
+    align-items: flex-end; // 下端を生成ボタンの行に揃える
     flex-wrap: wrap;
     gap: 12px;
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid var(--divider);
 
-    input {
-        box-sizing: border-box;
-        flex: 1 1 160px;
-        min-width: 0;
-        max-width: 280px;
-        min-height: var(--ctl-h);
-        padding: 8px 12px;
-        border: 1px solid var(--btn-border);
-        border-radius: 8px;
-        background: var(--card-bg);
-        color: var(--text);
-        font-size: 14px;
+    // 左側のフォーム部品：生成ボタン(--gen-h)の縦中央に合わせる
+    > :not(.generates) {
+        margin-bottom: calc((var(--gen-h) - var(--field-h)) / 2);
+    }
 
-        &:focus {
-            outline: none;
-            border-color: var(--btn-hover-border);
+    // GPU選択行の下に出す案内文（積み重ねレイアウトのときだけ表示。下のコンテナクエリ参照）
+    .status-bottom {
+        display: none;
+        margin: -8px 0; // パディング分を差し引いて、GPU選択行とボタン群の両方に近づける
+
+        .status-text {
+            max-width: 28em; // 案内文の幅（16px の文字で 28 文字ぶん＝約448px）
         }
     }
 
-    .replace-arrow {
-        flex-shrink: 0;
-        color: var(--muted);
-    }
+    // ボタン群：右端に寄せる
+    .generates {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 12px;
+        flex: 0 0 auto;
+        margin-left: auto;
 
-    #replace_btn {
-        flex-shrink: 0;
-        min-height: var(--ctl-h);
-        padding: 8px 24px;
-        border: var(--btn-border) solid 2px;
-        border-radius: 10000px;
-        background: var(--btn-bg);
-        color: var(--btn-text);
-        font-size: 14px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: 0.1s;
+        button {
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0; // 縮めない
+            white-space: nowrap; // 文字を折り返さない
+            height: var(--gen-h);
+            background-color: var(--btn-bg);
+            border: var(--btn-border) solid 2px;
+            color: var(--btn-text);
+            // 左右の余白と文字サイズを、カード幅に応じて連続的に変える
+            padding: 0 clamp(16px, 5cqi, 50px);
+            font-weight: 700;
+            border-radius: 10000px;
+            font-size: clamp(16px, 2.2cqi, 20px);
+            transition: 0.1s;
+        }
 
         @media (hover: hover) {
-            &:hover:not(:disabled) {
+            button:hover:not(:disabled) {
                 background-color: var(--btn-hover-bg);
                 border-color: var(--btn-hover-border);
                 color: var(--btn-hover-text);
             }
+
+            #stop_btn:hover:not(:disabled) {
+                border-color: #fa3838;
+            }
         }
 
-        &:disabled {
+        button:disabled {
             opacity: 0.4;
             cursor: not-allowed;
         }
-    }
 
-    .replace-result {
-        color: var(--muted);
-        overflow-wrap: anywhere;
-
-        // 結果が空のときは行を作らない（折り返し時に余計な隙間が出ないように）
-        &:empty {
-            display: none;
+        // 停止ボタン・1枚だけ生成ボタン: 生成ボタンより少し小さめにする
+        #stop_btn,
+        #generate_one_btn {
+            padding-inline: clamp(12px, 3.2cqi, 32px);
         }
     }
 }
 
 // =====================================================================
-// コンテナクエリ（カード幅が基準。上ほど広い）
-// =====================================================================
-
-// 〜760px：スライダー群を3列グリッドにする
-//   [ アスペクト比セレクト ]  ← 1行ぶち抜き
+// 積み重ねレイアウト
+//   ・カード幅が 1400px 以下のときに使う
+//
+//   [ アスペクト比セレクト ]
 //   [ Width ] [⇄] [ Height ]
-//   [ 生成枚数 ]              ← 1行ぶち抜き、上に区切り線
-@container gen (max-width: 1760px) {
-    .meta-container .meta-data-container {
-        flex-basis: 100%; // 生成ボタン群は必ず下の行へ
-
+//   [ 生成枚数 ]              ← 上に区切り線
+//   ─────────────────────────
+//   [GPU ▾]
+//   翻訳画面に入力してください   ← 左寄せ。GPU選択行のすぐ下・ボタンのすぐ上
+//   [停止] [1枚だけ生成] [生成]  ← 左寄せ
+// =====================================================================
+@mixin stacked-layout {
+    .meta-data-container {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
         gap: 16px 12px;
         align-items: start;
 
-        .aspect-select {
+        .aspect-dd {
             grid-column: 1 / -1;
             justify-self: start;
             margin-top: 0;
@@ -474,14 +672,47 @@ html .my-glow-overlay {
         }
     }
 
-    .meta-container .generates {
-        flex: 1 1 100%;
+    // スライダー行の右の案内文はやめて、GPU選択行の下の案内文を使う
+    .top-section .status-top {
+        display: none;
+    }
+
+    // 右端の案内文がなくなるので、スライダー行の右側の余白も不要
+    .meta-container .meta-data-container {
+        padding-right: 0;
+    }
+
+    // 案内文の文字サイズ：1400px以下は 16px
+    .generate-status {
+        font-size: 16px;
+    }
+
+    .action-container {
+        .status-bottom:not([data-state="ready"]) {
+            display: block;
+            flex: 1 1 100%;
+            max-width: none;
+            text-align: left;
+            border-right: none;
+            border-left: 4px solid var(--state-color); // 左寄せなので縦棒も左側
+        }
+
+        // ボタン群は専用の行に左寄せで置く
+        .generates {
+            flex: 1 1 100%;
+            justify-content: flex-start;
+            margin-left: 0;
+        }
     }
 }
 
-// 〜460px：スライダーを1列に縦積みし、生成ボタンを折り返して全幅に伸ばす
+@container gen (max-width: 1400px) {
+    @include stacked-layout;
+}
+
+// 〜460px：スライダーも1列に縦積み。置換フォームも縦に並べ、ボタンは全幅に伸ばす
 @container gen (max-width: 460px) {
-    .meta-container .meta-data-container {
+    .meta-data-container {
         grid-template-columns: minmax(0, 1fr);
 
         // 縦に並ぶので、入れ替えボタンは中央に置き、矢印を縦向き（⇅）にする
@@ -494,51 +725,52 @@ html .my-glow-overlay {
             }
         }
 
-        .aspect-select {
+        .aspect-dd {
             justify-self: stretch;
+
+            .dd-trigger {
+                width: 100%;
+            }
         }
     }
 
-    .meta-container .generates {
-        flex-wrap: wrap;
-        gap: 8px;
+    .action-container {
+        gap: 8px 12px;
 
-        // 状態メッセージは1行ぶち抜き。縦棒は左側に付け替える
-        p {
+        > :not(.generates) {
+            margin-bottom: 0;
+        }
+
+        .gpu-select {
             flex: 1 1 100%;
-            max-width: none;
-            border-right: none;
-            border-left: 4px solid var(--state-color);
+
+            .dd-trigger {
+                width: 100%;
+            }
+
+            .dd-trigger-label {
+                display: none;
+            }
+
+            .dd-trigger-price {
+                margin-left: auto;
+            }
+
+            // 狭いので「$/秒」の列は省く
+            .gpu-head,
+            .dd-option {
+                grid-template-columns: minmax(0, 1fr) 56px 84px;
+                padding: 0 14px;
+            }
+
+            .gpu-sec {
+                display: none;
+            }
         }
 
-        // ボタンは行内で均等に伸ばす
-        button {
+        .generates button {
             flex: 1 1 auto;
         }
-    }
-
-    .replace-container {
-        input {
-            flex-basis: 100%;
-            max-width: none;
-        }
-
-        // 上下に並ぶので矢印も縦向きにして中央へ
-        .replace-arrow {
-            margin-inline: auto;
-            transform: rotate(90deg);
-        }
-
-        #replace_btn {
-            flex: 1 1 auto;
-        }
-    }
-}
-
-// 〜360px：カード自体の余白も詰める
-@container gen (max-width: 360px) {
-    .meta-container {
-        gap: 12px;
     }
 }
 
@@ -570,4 +802,179 @@ html .my-glow-overlay {
   .my-glow-overlay.is-active {
     animation-duration: 0.4s;
   }
+}
+
+
+// =====================================================================
+// グループ（選択した文字を含む行の左側に付ける、色付きの縦線）
+//  ・#my-group-layer は body 直下の透明なレイヤー。縦線とポップアップはこの中に置く
+//  ・縦線・ポップアップはページ全体の反転フィルターを打ち消している（一番上のリスト参照）ので、
+//    ここに書いた色がそのまま見える
+// =====================================================================
+#my-group-layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    z-index: 2147483646;
+    pointer-events: none;
+}
+
+// 行の左の縦線。位置・高さ・色は JS が指定する
+.my-group-bar {
+    position: absolute;
+    box-sizing: border-box;
+    border-radius: 999px;
+    pointer-events: auto; // ホバーでグループ名（title）を見られるようにする
+    cursor: default;
+
+    // 細い縦線でもホバーしやすいように、当たり判定だけ左右に広げる
+    &::before {
+        content: "";
+        position: absolute;
+        inset: 0 -4px;
+    }
+}
+
+// グループ追加ポップアップ
+.my-group-popover {
+    --gp-bg: #000000;
+    --gp-border: #2a2a2a;
+    --gp-text: #e6eaf0;
+    --gp-muted: #8d939c;
+    --gp-field-bg: #1a1a1a;
+    --gp-field-border: #3e3e3e;
+    --gp-btn-border: #9c9c9c;
+    --gp-accent: #4fa7fc;
+    --gp-shadow: 0 12px 32px rgba(0, 0, 0, 0.75);
+
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 264px;
+    max-width: calc(100vw - 16px);
+    padding: 14px;
+    background: var(--gp-bg);
+    border: 1px solid var(--gp-border);
+    border-radius: 12px;
+    box-shadow: var(--gp-shadow);
+    color: var(--gp-text);
+    color-scheme: dark;
+    font-size: 14px;
+    line-height: 1.4;
+    pointer-events: auto;
+    animation: my-group-pop 0.12s ease-out;
+
+    // グループ名
+    .my-group-name {
+        box-sizing: border-box;
+        width: 100%;
+        height: 38px;
+        margin: 0;
+        padding: 0 12px;
+        border: 1px solid var(--gp-field-border);
+        border-radius: 8px;
+        background: var(--gp-field-bg);
+        color: var(--gp-text);
+        font: inherit;
+        outline: none;
+
+        &::placeholder {
+            color: var(--gp-muted);
+        }
+
+        &:focus {
+            border-color: var(--gp-accent);
+        }
+    }
+
+    // 8色のパレット
+    .my-group-colors {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        gap: 6px;
+        padding: 2px;
+    }
+
+    .my-group-swatch {
+        box-sizing: border-box;
+        width: 100%;
+        aspect-ratio: 1;
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: transform 0.1s;
+
+        @media (hover: hover) {
+            &:hover {
+                transform: scale(1.12);
+            }
+        }
+
+        // 選択中の色は白いリングで囲む
+        &[aria-checked="true"],
+        &:focus-visible {
+            outline: 2px solid var(--gp-text);
+            outline-offset: 2px;
+        }
+    }
+
+    // 「グループを追加」ボタン
+    .my-group-add {
+        box-sizing: border-box;
+        height: 40px;
+        margin: 0;
+        padding: 0 16px;
+        border: 2px solid var(--gp-btn-border);
+        border-radius: 10000px;
+        background: transparent;
+        color: var(--gp-text);
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        transition: 0.1s;
+
+        @media (hover: hover) {
+            &:hover {
+                border-color: var(--gp-accent);
+            }
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--gp-accent);
+            outline-offset: 2px;
+        }
+    }
+}
+
+// タッチ端末：タップしやすい大きさにする
+@media (pointer: coarse) {
+    .my-group-popover {
+        width: 296px;
+
+        .my-group-name {
+            height: 44px;
+        }
+
+        .my-group-add {
+            height: 48px;
+        }
+    }
+}
+
+@keyframes my-group-pop {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .my-group-popover {
+        animation: none;
+    }
 }
