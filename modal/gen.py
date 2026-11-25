@@ -1254,7 +1254,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (ConnectionError, TimeoutError):
+            # ブラウザ側が先に接続を切った(タブを閉じた/再読み込みした等)。無視してよい
+            pass
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -1307,6 +1311,13 @@ class GenServer(ThreadingHTTPServer):
     # (HTTPServer 既定の allow_reuse_address=True だと、Windows では
     #  使用中のポートにも bind できてしまい、複数のプロセスが同時に起動する)
     allow_reuse_address = False
+
+    def handle_error(self, request, client_address):
+        # クライアントが接続を切っただけのエラーは、トレースバックを出さずに無視する
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionError, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
 
     def server_bind(self):
         if os.name == "nt":
