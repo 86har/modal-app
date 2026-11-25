@@ -71,7 +71,7 @@ html .my-group-popover {
     max-width: 100%;
 
     padding: 20px clamp(16px, 3vw, 30px);
-    margin: 8px 0;
+    margin: 8px 0 96px; // 下に余白を取る（ページの一番下で、パネルがウィンドウの端やタスクバーに隠れないように）
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: 15px;
@@ -86,7 +86,8 @@ html .my-group-popover {
 
 // ドロップダウンを開いている間だけ、カード全体を前面に出す。
 // （カードは独立した重なり順の単位になるため、そのままだと後ろに並ぶDeepLのフッター側の要素が上に描かれる）
-.my-injected-element:has(.dd.is-open) {
+.my-injected-element:has(.dd.is-open),
+.my-injected-element:has(.adv-wrap.is-open) {
     position: relative;
     z-index: 2147483000;
 }
@@ -207,7 +208,9 @@ html .my-group-popover {
 }
 
 // ----- スライダー群 -----
-.meta-data-container {
+// 詳細設定ポップアップ(.adv-pop)は画像選択ボタンの横に移動したので、スライダーの見た目はそちらにも効かせる
+.meta-data-container,
+.adv-pop {
     display: flex;
     flex-wrap: wrap; // 幅が足りないときは折り返す
     justify-content: flex-start;
@@ -552,6 +555,386 @@ html .my-group-popover {
     }
 }
 
+// ----- 詳細設定ボタン（画像選択ボタンの右）とポップアップ -----
+//   [GPU ▾] [🖼 画像] [⚙ 詳細設定]
+.adv-wrap {
+    position: relative;
+    flex: 0 0 auto;
+
+    .adv-button {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: var(--field-h); // GPU選択・画像選択ボタンと同じ高さ
+        padding: 0 14px;
+        border: none;
+        border-radius: 8px;
+        background: var(--dd-trigger-bg);
+        color: var(--dd-text);
+        font-size: 14px;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background 0.1s;
+
+        svg {
+            flex: 0 0 auto;
+            color: var(--dd-muted);
+        }
+
+        @media (hover: hover) {
+            &:hover {
+                background: var(--dd-trigger-hover);
+            }
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--btn-hover-border);
+            outline-offset: 2px;
+        }
+    }
+
+    &.is-open .adv-button svg {
+        color: var(--slider-accent);
+    }
+
+    .adv-pop {
+        position: absolute;
+        left: 0;
+        top: calc(100% + 8px);
+        z-index: 20;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        width: 300px;
+        max-width: calc(100cqi - 8px);
+        padding: 16px;
+        background: var(--dd-bg);
+        border: 1px solid var(--dd-border);
+        border-radius: 8px;
+        box-shadow: var(--dd-shadow);
+
+        &[hidden] {
+            display: none;
+        }
+    }
+
+    &.is-right .adv-pop {
+        left: auto;
+        right: 0;
+    }
+
+    // ポップアップ内のスライダーは縦に並べる（既存の flex 基準 240px を打ち消す）
+    .adv-pop .meta-data-item[data-slider] {
+        flex: none;
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+
+    // ----- LoRA（version ID と重み） -----
+    //   LoRA                     [＋ 追加]
+    //   version ID        重み
+    //   [ 3409322       ] [0.8 ] [×]
+    .lora-section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        color: var(--label);
+
+        .lora-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+
+            .lora-title {
+                font-weight: 700;
+            }
+        }
+
+        .lora-add {
+            box-sizing: border-box;
+            height: 28px;
+            padding: 0 12px;
+            border: 1px solid var(--btn-border);
+            border-radius: 10000px;
+            background: transparent;
+            color: var(--btn-text);
+            font-size: 13px;
+            white-space: nowrap;
+            cursor: pointer;
+
+            @media (hover: hover) {
+                &:hover:not(:disabled) {
+                    border-color: var(--btn-hover-border);
+                    color: var(--btn-hover-text);
+                }
+            }
+
+            &:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+        }
+
+        .lora-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        // 見出しと各行は同じ列幅にそろえる
+        .lora-cols,
+        .lora-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 76px var(--ctl-h);
+            gap: 6px;
+            align-items: center;
+        }
+
+        .lora-cols {
+            font-size: 12px;
+            color: var(--dd-muted);
+
+            &[hidden] {
+                display: none;
+            }
+        }
+
+        .lora-id,
+        .lora-strength {
+            box-sizing: border-box;
+            width: 100%;
+            min-width: 0;
+            height: var(--ctl-h);
+            margin: 0;
+            padding: 0 10px;
+            border: 1px solid var(--dd-border);
+            border-radius: 8px;
+            background: var(--dd-trigger-bg);
+            color: var(--dd-text);
+            font: inherit;
+            outline: none;
+
+            &::placeholder {
+                color: var(--dd-muted);
+            }
+
+            &:focus {
+                border-color: var(--slider-accent);
+            }
+        }
+
+        .lora-strength {
+            text-align: right;
+        }
+
+        .lora-remove {
+            box-sizing: border-box;
+            width: var(--ctl-h);
+            height: var(--ctl-h);
+            margin: 0;
+            padding: 0;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--dd-muted);
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+
+            @media (hover: hover) {
+                &:hover {
+                    background: var(--dd-hover);
+                    color: var(--dd-text);
+                }
+            }
+        }
+
+        .lora-empty {
+            margin: 0;
+            font-size: 13px;
+            color: var(--dd-muted);
+
+            &[hidden] {
+                display: none;
+            }
+        }
+    }
+
+    .adv-reset {
+        box-sizing: border-box;
+        align-self: flex-end;
+        height: 32px;
+        padding: 0 14px;
+        border: 1px solid var(--btn-border);
+        border-radius: 10000px;
+        background: transparent;
+        color: var(--btn-text);
+        font-size: 13px;
+        cursor: pointer;
+
+        @media (hover: hover) {
+            &:hover {
+                border-color: var(--btn-hover-border);
+                color: var(--btn-hover-text);
+            }
+        }
+    }
+}
+
+// ----- 参照画像の選択（GPU選択の右） -----
+//   選択前:  [GPU ▾] [🖼 画像]              [⚙ 詳細設定]
+//   選択後:  [GPU ▾] [🖼 photo.png ×]       [⚙ 詳細設定]   ← 画像名がボタンの文字になる
+//   ホバー:  [GPU ▾] [🖼 別の画像を選択 ×]  [⚙ 詳細設定]
+@mixin image-pick-swap-text {
+    .image-pick-label {
+        visibility: hidden;
+    }
+
+    .image-pick-hover {
+        visibility: visible;
+    }
+}
+
+.image-pick {
+    position: relative; // 「×」をボタンの中に重ねる
+    display: inline-flex;
+    align-items: center;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+
+    .image-pick-btn {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1 1 auto;
+        min-width: 0;
+        height: var(--field-h);
+        padding: 0 14px;
+        border: none;
+        border-radius: 8px;
+        background: var(--dd-trigger-bg);
+        color: var(--dd-text);
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.1s;
+
+        svg {
+            flex: 0 0 auto;
+            color: var(--dd-muted);
+        }
+
+        @media (hover: hover) {
+            &:hover:not(:disabled) {
+                background: var(--dd-trigger-hover);
+            }
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--btn-hover-border);
+            outline-offset: 2px;
+        }
+
+        &:disabled {
+            opacity: 0.6;
+            cursor: progress; // ファイル選択ダイアログを開いている間
+        }
+    }
+
+    // ボタンの文字。「画像名」と「別の画像を選択」を同じ場所に重ねて、ホバーで切り替える
+    // （どちらか長いほうの幅になるので、切り替えてもボタンの幅が変わらない）
+    .image-pick-text {
+        display: grid;
+        min-width: 0;
+        text-align: left;
+    }
+
+    .image-pick-label,
+    .image-pick-hover {
+        grid-area: 1 / 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis; // 長い画像名は「…」で省略
+        white-space: nowrap;
+    }
+
+    .image-pick-label {
+        max-width: 14em;
+    }
+
+    .image-pick-hover {
+        visibility: hidden;
+    }
+
+    // 画像を選ぶと、アイコンの色を変え、文字を画像名（太字）にする
+    &.has-image {
+        .image-pick-btn svg {
+            color: var(--slider-accent);
+        }
+
+        .image-pick-label {
+            font-weight: 700;
+        }
+
+        // 右端の「×」の分だけ余白を空ける
+        .image-pick-btn {
+            padding-right: 40px;
+        }
+
+        .image-pick-btn:focus-visible:not(:disabled) {
+            @include image-pick-swap-text;
+        }
+
+        @media (hover: hover) {
+            .image-pick-btn:hover:not(:disabled) {
+                @include image-pick-swap-text;
+            }
+        }
+    }
+
+    // 選んだ画像を外す「×」（画像選択ボタンの右端の内側に重ねる）
+    .image-pick-clear {
+        position: absolute;
+        top: 50%;
+        right: 8px;
+        transform: translateY(-50%);
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--dd-muted);
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+
+        &[hidden] {
+            display: none; // display 指定が hidden 属性に勝ってしまうため
+        }
+
+        @media (hover: hover) {
+            &:hover {
+                background: var(--dd-hover);
+                color: var(--dd-text);
+            }
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--btn-hover-border);
+        }
+    }
+}
+
 // ----- GPU選択 ＋ 生成ボタン群（同じ行に並べる） -----
 //   [GPU ▾]                                  翻訳画面に入力してください
 //                                        [停止] [1枚だけ生成] [生成]
@@ -768,8 +1151,69 @@ html .my-group-popover {
             }
         }
 
+        .image-pick,
+        .adv-wrap {
+            flex: 1 1 100%;
+        }
+
+        .image-pick-btn,
+        .adv-wrap .adv-button {
+            width: 100%;
+        }
+
         .generates button {
             flex: 1 1 auto;
+        }
+    }
+}
+
+// ----- 画像をページにドラッグしてきたとき（参照画像のドロップ先） -----
+// html.my-image-dragging が付いている間（JS の setupImageDrop）、パネルの中身をすべて隠して、
+// 点線の枠＋文字だけにする。中身は display:none にせず visibility:hidden にして、パネルの高さを保つ
+// （高さが変わると、ドラッグ中にページがガタつくため）。
+.image-drop {
+    display: none;
+}
+
+html.my-image-dragging .my-injected-element {
+    --drop-bg: #e8f3ff;
+    --drop-bg-over: #d3e8ff;
+    --drop-border: #2f80e0;
+    --drop-text: #1c1c1c;
+
+    position: relative;
+    min-height: 120px;
+
+    &[data-theme="dark"] {
+        --drop-bg: #031524;
+        --drop-bg-over: #072943;
+        --drop-border: #3b91f0;
+        --drop-text: #e6eaf0;
+    }
+
+    > *:not(.image-drop) {
+        visibility: hidden;
+    }
+
+    > .image-drop {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        inset: 8px;
+        box-sizing: border-box;
+        padding: 12px;
+        border: 2px dashed var(--drop-border);
+        border-radius: 8px;
+        background: var(--drop-bg);
+        color: var(--drop-text);
+        font-size: 14px;
+        font-weight: 600;
+        text-align: center;
+        transition: background-color 0.12s;
+
+        &.is-over {
+            background: var(--drop-bg-over);
         }
     }
 }
@@ -821,19 +1265,265 @@ html .my-group-popover {
     pointer-events: none;
 }
 
+// 縦線・タグ・上下のボーダー・ホバーの色は、エディタの見えている範囲だけに表示する（clip-path は JS が指定）。
+// 上下のボーダー（.my-group-lines）：範囲の上端・下端に、グループの色の薄い線を常に引く
+.my-group-lines,
+.my-group-bars,
+.my-group-hl {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+}
+
+.my-group-lines {
+    pointer-events: none;
+}
+
 // 行の左の縦線。位置・高さ・色は JS が指定する
 .my-group-bar {
     position: absolute;
     box-sizing: border-box;
     border-radius: 999px;
     pointer-events: auto; // ホバーでグループ名（title）を見られるようにする
-    cursor: default;
+    cursor: grab; // 何もない部分をドラッグすると、その範囲の行ごと動かせる
+    touch-action: none;
 
-    // 細い縦線でもホバーしやすいように、当たり判定だけ左右に広げる
+    // 細い縦線でもつかみやすいように、当たり判定だけ左右に広げる
     &::before {
         content: "";
         position: absolute;
-        inset: 0 -4px;
+        inset: 0 -6px;
+    }
+}
+
+// 縦線の下端のつまみ。タグ（上端）と同じように、縦線の右端にそろえて左へ伸びる四角い突起。
+// 上下にドラッグすると、グループに含める行の下の端を動かせる（上の端は、タグをつまんで動かす）
+// 色は JS が --g-color で指定する。縦線にカーソルを乗せたとき／ドラッグ中だけ見せる
+.my-group-grip {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 28px;
+    height: 10px;
+    border-radius: 2px 0 0 2px;
+    background-color: var(--g-color, #888888);
+    cursor: ns-resize;
+    touch-action: none; // タッチ操作でもドラッグ中にページがスクロールしないように
+    opacity: 0;
+    transition: opacity 0.12s, filter 0.1s;
+
+    // 細いので、当たり判定だけ上下左右に広げる
+    &::before {
+        content: "";
+        position: absolute;
+        inset: -4px -4px -6px -6px;
+    }
+
+    @media (hover: hover) {
+        &:hover {
+            filter: brightness(1.15);
+        }
+    }
+}
+
+.my-group-bar.is-dragging .my-group-grip {
+    opacity: 1;
+}
+
+// 行ごと動かしている間（タグをつまんで移動中）、元の縦線・タグは半透明にする。
+// マウスに追従する「つまんでいる」見た目（.my-group-drag-ghost）のほうに注目させるため
+.my-group-bar.is-move-ghost {
+    opacity: 0.35;
+}
+
+// 上のつまみは、1行だけ（.is-compact）のときにだけ使う。普通の縦線では、上の端はタグをつまんで動かす
+.my-group-grip-top {
+    display: none;
+    top: 0;
+    bottom: auto;
+}
+
+// 1行しかないタグ：縦線が短く、タグとつまみが重なってつかめなくなるので、つまみを縦線の上下の外側に出す。
+//   ・タグをつまんで動かす … 行ごと移動（クリックなら、これまでどおり編集ポップアップ）
+//   ・上のつまみ / 下のつまみをドラッグ … 上の端 / 下の端の調整（2行以上になれば、普通の縦線の表示に戻る）
+.my-group-bar.is-compact {
+    --grip-w: 18px; // つまみの大きさ（上下とも同じ）
+    --grip-h: 5px;
+    --grip-gap: 4px; // 縦線とつまみのすき間（上下とも同じ）
+
+    .my-group-grip {
+        display: block;
+        width: var(--grip-w);
+        height: var(--grip-h);
+        border-radius: 2px;
+
+        // 当たり判定は、上下左右とも同じ幅だけ広げる
+        &::before {
+            inset: -5px;
+        }
+    }
+
+    .my-group-grip-top {
+        top: calc(-1 * (var(--grip-h) + var(--grip-gap)));
+        bottom: auto;
+    }
+
+    .my-group-grip:not(.my-group-grip-top) {
+        top: auto;
+        bottom: calc(-1 * (var(--grip-h) + var(--grip-gap)));
+    }
+
+    .my-group-tag {
+        cursor: grab;
+        gap: 4px;
+
+        // つかんで動かせることを示す印
+        &::before {
+            content: "⋮⋮";
+            flex: 0 0 auto;
+            font-size: 10px;
+            letter-spacing: -2px;
+            opacity: 0.55;
+        }
+    }
+}
+
+// 連続している同じグループのタグ（.is-run）：縦線のドラッグで、連続しているぶんがまとめて動く。
+// この要素だけ動かすためのつまみ「⋮⋮」を、タグの左端に出す（Alt+ドラッグでも単体で動かせる）。
+// 1行だけ（.is-compact）のタグは、タグ自体をつかんで動かすと単体で動くので、つまみは出さない
+.my-group-tag-grab {
+    display: none;
+    flex: 0 0 auto;
+    margin: -3px 3px -3px -5px; // タグの左端いっぱいに当たり判定を広げる
+    padding: 3px 3px 3px 5px;
+    font-size: 10px;
+    line-height: 1.3;
+    letter-spacing: -2px;
+    opacity: 0.55;
+    cursor: grab;
+    touch-action: none;
+
+    @media (hover: hover) {
+        &:hover {
+            opacity: 1;
+        }
+    }
+}
+
+.my-group-bar.is-run:not(.is-compact) .my-group-tag-grab {
+    display: block;
+}
+
+@media (hover: hover) {
+    .my-group-bar:hover .my-group-grip {
+        opacity: 1;
+    }
+}
+
+// タッチ操作ではホバーがないので常に見せて、つかみやすく大きくする
+@media (hover: none) {
+    .my-group-grip {
+        width: 36px;
+        height: 16px;
+        opacity: 0.9;
+    }
+}
+
+// 1行タグのつまみも、タッチ操作では少し大きくする（上下の大きさ・すき間は同じ）
+@media (hover: none) {
+    .my-group-bar.is-compact {
+        --grip-w: 28px;
+        --grip-h: 10px;
+        --grip-gap: 6px;
+    }
+}
+
+// グループ名の突起（縦線の一番上の左側）。クリックすると編集ポップアップが開く
+.my-group-tag {
+    position: absolute;
+    right: 0; // 縦線の右端にそろえて、左へ突き出す
+    top: 0; // 他のタグと重なるときは JS が下へずらす
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    width: max-content;
+    min-width: 28px;
+    padding: 3px 8px;
+    border-radius: 8px 0 0 8px;
+    color: #111111;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+    touch-action: none; // つまんで動かせるように
+    transition: filter 0.1s;
+    // 背景色は JS がグループの色を指定する
+
+    @media (hover: hover) {
+        &:hover {
+            filter: brightness(1.15);
+        }
+    }
+
+    &:focus-visible {
+        outline: 2px solid #111111;
+        outline-offset: -2px;
+    }
+
+    .my-group-tag-name {
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+// ドラッグ中、タグと同じ見た目の小さな要素をマウスの動きに合わせて出す（「持っている」感を出すため）。
+// 連なった複数件をまとめて動かしているときは、件ごとに分けて縦に並べ、半透明にする
+.my-group-drag-ghost {
+    position: absolute;
+    z-index: 2147483000;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+}
+
+.my-group-drag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    width: max-content;
+    max-width: 200px;
+    padding: 3px 10px 3px 6px;
+    border-radius: 8px;
+    color: #111111;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.8; // つまんで浮かせている、分裂した要素であることを示す半透明
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+    transform: rotate(-1.5deg);
+
+    .my-group-tag-grab {
+        display: inline-flex !important;
+        margin: 0;
+        padding: 0;
+        opacity: 0.6;
+    }
+
+    .my-group-tag-name {
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 }
 
@@ -854,7 +1544,7 @@ html .my-group-popover {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    width: 264px;
+    width: 340px;
     max-width: calc(100vw - 16px);
     padding: 14px;
     background: var(--gp-bg);
@@ -868,8 +1558,9 @@ html .my-group-popover {
     pointer-events: auto;
     animation: my-group-pop 0.12s ease-out;
 
-    // グループ名
-    .my-group-name {
+    // グループ名・アイテム名
+    .my-group-name,
+    .my-group-item {
         box-sizing: border-box;
         width: 100%;
         height: 38px;
@@ -888,6 +1579,19 @@ html .my-group-popover {
 
         &:focus {
             border-color: var(--gp-accent);
+        }
+    }
+
+    // 「グループ名」と「アイテム名」を横に並べる
+    .my-group-names {
+        display: flex;
+        gap: 8px;
+
+        .my-group-name,
+        .my-group-item {
+            flex: 1 1 0;
+            width: auto;
+            min-width: 0;
         }
     }
 
@@ -925,8 +1629,9 @@ html .my-group-popover {
         }
     }
 
-    // 「グループを追加」ボタン
-    .my-group-add {
+    // 「グループを追加」ボタン（編集ポップアップの「解除」「削除」も同じ見た目）
+    .my-group-add,
+    .my-group-btn {
         box-sizing: border-box;
         height: 40px;
         margin: 0;
@@ -953,20 +1658,552 @@ html .my-group-popover {
     }
 }
 
+// 編集ポップアップ：[解除] [削除] を横に並べる。削除は赤で強調する
+.my-group-popover .my-group-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    .my-group-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 0 8px;
+    }
+
+    // 「グループをすべて削除」は文字が長く、横に並べると幅が足りず欠けてしまうので、
+    // 次の行に単独で、popover の横幅いっぱいに広げて置く
+    .my-group-remove-all {
+        flex: 1 1 100%;
+        white-space: nowrap;
+        padding: 0 8px;
+    }
+
+    .my-group-remove,
+    .my-group-remove-all {
+        @media (hover: hover) {
+            &:hover {
+                border-color: #fa3838;
+            }
+        }
+    }
+}
+
+// グループ名の候補（入力するたびに更新。最大10件）
+.my-group-popover .my-group-suggest {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: -4px; // 名前の入力欄に寄せる
+
+    &[hidden] {
+        display: none;
+    }
+
+    .my-group-suggest-item {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        height: 28px;
+        margin: 0;
+        padding: 0 10px 0 8px;
+        border: 1px solid var(--gp-field-border);
+        border-radius: 10000px;
+        background: transparent;
+        color: var(--gp-text);
+        font: inherit;
+        font-size: 12.5px;
+        cursor: pointer;
+        transition: 0.1s;
+
+        @media (hover: hover) {
+            &:hover {
+                border-color: var(--gp-accent);
+                background: var(--gp-field-bg);
+            }
+        }
+
+        // キーボード（↑↓）で選んでいる候補
+        &.is-active,
+        &:focus-visible {
+            outline: none;
+            border-color: var(--gp-accent);
+            background: var(--gp-field-bg);
+        }
+    }
+
+    .my-group-suggest-dot {
+        flex: 0 0 auto;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+    }
+
+    .my-group-suggest-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+@media (pointer: coarse) {
+    .my-group-popover .my-group-suggest .my-group-suggest-item {
+        height: 34px;
+    }
+}
+
 // タッチ端末：タップしやすい大きさにする
 @media (pointer: coarse) {
     .my-group-popover {
-        width: 296px;
+        width: 372px;
 
-        .my-group-name {
+        .my-group-name,
+        .my-group-item {
             height: 44px;
         }
 
-        .my-group-add {
+        .my-group-add,
+        .my-group-btn {
             height: 48px;
         }
     }
 }
+
+// 右クリックメニュー
+//   [グループを追加]
+//   [グループを代入 ›] → グループ名の一覧 › アイテム名の一覧 › 中身（アイテム名にホバーで）
+// 3つのパネル（.my-ctx-sub / .my-ctx-items / .my-ctx-preview）は同じ見た目（.my-ctx-panel）。
+// 一覧は項目の右隣に出す。収まらないときは JS が .is-left を付けて左隣にする
+.my-ctx-menu {
+    --gp-bg: #0c0c0d;
+    --gp-border: #2a2c31;
+    --gp-text: #e6eaf0;
+    --gp-muted: #8d939c;
+    --gp-hover: #1c1e22;
+    --gp-accent: #4fa7fc;
+    --gp-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 16px 40px rgba(0, 0, 0, 0.7);
+
+    position: absolute;
+    box-sizing: border-box;
+    width: 210px;
+    padding: 6px;
+    background: var(--gp-bg);
+    border: 1px solid var(--gp-border);
+    border-radius: 12px;
+    box-shadow: var(--gp-shadow);
+    color: var(--gp-text);
+    color-scheme: dark;
+    font-size: 14px;
+    line-height: 1.4;
+    pointer-events: auto;
+    animation: my-group-pop 0.12s ease-out;
+
+    .my-ctx-row {
+        position: relative;
+    }
+
+    // ---- 項目（共通） ----
+    .my-ctx-item {
+        --c: var(--gp-muted); // 色は JS がグループの色にする
+
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 34px;
+        margin: 0;
+        padding: 0 10px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background 0.08s;
+
+        @media (hover: hover) {
+            &:hover:not(:disabled) {
+                background: var(--gp-hover);
+            }
+        }
+
+        &:focus-visible {
+            outline: none;
+            background: var(--gp-hover);
+        }
+
+        &:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+    }
+
+    .my-ctx-icon {
+        flex: 0 0 auto;
+        color: var(--gp-muted);
+    }
+
+    .my-ctx-label {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .my-ctx-arrow {
+        flex: 0 0 auto;
+        margin-left: auto;
+        color: var(--gp-muted);
+        font-size: 16px;
+        line-height: 1;
+    }
+
+    .my-ctx-sep {
+        height: 1px;
+        margin: 4px 6px;
+        background: var(--gp-border);
+    }
+
+    // 一覧を開いている間は、親の項目を強調したままにする
+    &.is-sub-open .my-ctx-parent {
+        background: var(--gp-hover);
+    }
+
+    // ---- パネル（共通） ----
+    .my-ctx-panel {
+        box-sizing: border-box;
+        padding: 6px;
+        background: var(--gp-bg);
+        border: 1px solid var(--gp-border);
+        border-radius: 12px;
+        box-shadow: var(--gp-shadow);
+
+        &[hidden] {
+            display: none;
+        }
+    }
+
+    // ---- 1段目：グループ名の一覧 ----
+    .my-ctx-sub {
+        position: absolute;
+        left: calc(100% + 6px);
+        top: -7px;
+        min-width: 200px;
+        max-width: 300px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: #555 transparent;
+        animation: my-ctx-flyout 0.1s ease-out;
+
+        // 項目と一覧のすき間（6px）を横切っても、ホバーが途切れないようにする
+        &::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: -8px;
+            width: 8px;
+        }
+
+        &.is-left::before {
+            left: auto;
+            right: -8px;
+        }
+
+        &.is-left {
+            left: auto;
+            right: calc(100% + 6px);
+            animation-name: my-ctx-flyout-left;
+        }
+    }
+
+    // 一覧のタブ（10件ごと）
+    .my-ctx-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 6px;
+        padding: 0 2px 6px;
+        border-bottom: 1px solid var(--gp-border);
+
+        &[hidden] {
+            display: none;
+        }
+    }
+
+    .my-ctx-tab {
+        flex: 1 1 0;
+        min-width: 0;
+        margin: 0;
+        padding: 4px 8px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--gp-muted);
+        font: inherit;
+        font-size: 12px;
+        white-space: nowrap;
+        cursor: pointer;
+
+        @media (hover: hover) {
+            &:hover {
+                background: var(--gp-hover);
+            }
+        }
+
+        &[aria-selected="true"] {
+            background: var(--gp-hover);
+            color: var(--gp-text);
+            font-weight: 700;
+        }
+    }
+
+    // グループの項目：開いている間は、背景だけ強調する（左の色付きバーは出さない）
+    .my-ctx-group {
+        &:focus-visible,
+        &.is-open {
+            background: var(--gp-hover);
+        }
+    }
+
+    .my-ctx-dot {
+        flex: 0 0 auto;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+    }
+
+    .my-ctx-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    // 件数・行数
+    .my-ctx-count {
+        flex: 0 0 auto;
+        padding: 1px 7px;
+        border-radius: 10000px;
+        background: rgba(255, 255, 255, 0.07);
+        color: var(--gp-muted);
+        font-size: 11px;
+    }
+
+    // ---- 2段目：アイテム名の一覧（JS が位置を決める） ----
+    .my-ctx-items {
+        position: absolute;
+        min-width: 200px;
+        max-width: 320px;
+        max-height: calc(100vh - 16px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: #555 transparent;
+        animation: my-ctx-flyout 0.1s ease-out;
+
+        &.is-left {
+            animation-name: my-ctx-flyout-left;
+        }
+    }
+
+    // 一覧の見出し（どのグループの中身か）。クリックすると、名前と色を変えられる
+    .my-ctx-panel-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+        padding: 6px 10px 8px;
+        border-bottom: 1px solid var(--gp-border);
+        border-radius: 8px 8px 0 0;
+        color: var(--gp-muted);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.08s;
+
+        @media (hover: hover) {
+            &:hover:not(.is-editing) {
+                background: var(--gp-hover);
+            }
+        }
+
+        &:focus-visible {
+            outline: none;
+            background: var(--gp-hover);
+        }
+
+        // 編集中：バーの下に色の選択を出すので、下の線は消す
+        &.is-editing {
+            margin-bottom: 0;
+            border-bottom-color: transparent;
+            cursor: default;
+        }
+    }
+
+    // 名前の入力欄
+    .my-ctx-head-input {
+        flex: 1 1 auto;
+        min-width: 0;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 3px 8px;
+        border: 1px solid var(--gp-border);
+        border-radius: 6px;
+        background: #16171a;
+        color: var(--gp-text);
+        font: inherit;
+        font-weight: 400;
+        font-size: 13px;
+
+        &:focus {
+            outline: none;
+            border-color: var(--gp-accent);
+        }
+    }
+
+    // 色の選択（8色）
+    .my-ctx-swatches {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 4px;
+        padding: 2px 10px 8px;
+        border-bottom: 1px solid var(--gp-border);
+    }
+
+    .my-ctx-swatch {
+        flex: 0 0 auto;
+        box-sizing: border-box;
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        padding: 0;
+        border: 2px solid transparent;
+        border-radius: 50%;
+        background-clip: padding-box;
+        cursor: pointer;
+        transition: transform 0.08s;
+
+        @media (hover: hover) {
+            &:hover {
+                transform: scale(1.15);
+            }
+        }
+
+        &[aria-checked="true"] {
+            box-shadow: 0 0 0 2px var(--gp-bg), 0 0 0 3.5px var(--gp-text);
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--gp-accent);
+            outline-offset: 2px;
+        }
+    }
+
+    // 「すべて追加」：ほかの項目と同じ文字サイズ・太さにそろえる（色だけ青）
+    .my-ctx-all .my-ctx-name {
+        color: var(--gp-accent);
+        font-size: inherit;
+        font-weight: inherit;
+    }
+
+    // 「グループを削除」：ふだんから赤文字。1回目のクリックで赤背景・白文字にして最終確認し、2回目で実行する
+    .my-ctx-delete {
+        --danger: #fa3838;
+
+        color: var(--danger);
+
+        &.is-armed,
+        &.is-armed:focus-visible {
+            background: var(--danger);
+            color: #fff;
+            font-weight: 700;
+        }
+
+        @media (hover: hover) {
+            &.is-armed:hover:not(:disabled) {
+                background: var(--danger);
+                color: #fff;
+            }
+        }
+    }
+
+    // アイテム名がないものは、最初の行を薄く出す
+    .my-ctx-entry.is-unnamed .my-ctx-name {
+        color: var(--gp-muted);
+        font-style: italic;
+    }
+
+    // ---- 3段目：アイテムの中身（JS が位置を決める） ----
+    .my-ctx-preview {
+        position: absolute;
+        min-width: 160px;
+        max-width: 340px;
+        padding: 10px;
+        font-size: 13px;
+        pointer-events: none;
+
+        .my-ctx-preview-span {
+            padding: 2px 0 2px 10px;
+            border-left: 3px solid var(--gp-muted); // 色は JS がグループの色にする
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+
+            & + .my-ctx-preview-span {
+                margin-top: 10px;
+            }
+        }
+
+        .my-ctx-preview-more {
+            margin-top: 8px;
+            color: var(--gp-muted);
+            font-size: 12px;
+        }
+    }
+
+    .my-ctx-preview-item {
+        margin-bottom: 2px;
+        color: var(--gp-muted);
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .my-ctx-empty {
+        padding: 8px 12px;
+        color: var(--gp-muted);
+        white-space: nowrap;
+    }
+}
+
+@media (pointer: coarse) {
+    .my-ctx-menu .my-ctx-item {
+        min-height: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .my-ctx-menu,
+    .my-ctx-menu .my-ctx-sub,
+    .my-ctx-menu .my-ctx-items {
+        animation: none;
+    }
+}
+
+@keyframes my-ctx-flyout {
+    from { opacity: 0; transform: translateX(-4px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes my-ctx-flyout-left {
+    from { opacity: 0; transform: translateX(4px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
 
 @keyframes my-group-pop {
     from { opacity: 0; transform: translateY(-4px); }

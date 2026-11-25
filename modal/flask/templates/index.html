@@ -7,7 +7,7 @@
 </head>
 <body>
   <div id="viewer">
-    <img id="img" src="/image?nocache={{ ts }}" draggable="false">
+    <img id="img" src="/image?nocache={{ ts }}" draggable="false" title="ダブルクリックでお気に入りに保存" onerror="this.classList.add('img-broken')" onload="this.classList.remove('img-broken')">
     <div id="selection"></div>
 
     <button id="prevBtn" class="nav-arrow nav-prev" type="button" title="前の画像へ" aria-label="前の画像へ">&#10094;</button>
@@ -15,13 +15,16 @@
   </div>
 
   <div id="sidebar">
+    <div id="sidebarResizeHandle"></div>
+    <button id="sidebarCollapseBtn" class="sidebar-collapse-btn" type="button" title="詳細タブを折りたたむ" aria-label="詳細タブを折りたたむ">&#187;</button>
     <div class="sidebar-top">
       <div class="sidebar-section-label">プレビュー</div>
-      <div id="sidebarPreviewWrap">
-        <img id="sidebarPreviewImg" src="" alt="">
+      <div id="sidebarPreviewWrap" title="ホイールで前後の画像に切替">
+        <img id="sidebarPreviewImg" src="" alt="" title="ダブルクリックでお気に入りに保存" onerror="this.classList.add('img-broken')" onload="this.classList.remove('img-broken')">
       </div>
       <div id="sidebarFilename">-</div>
       <div id="sidebarInfo">
+        <button id="copyPromptBtn" class="copy-prompt-btn" type="button">プロンプトをコピー</button>
         <div class="info-row">
           <span class="info-label">解像度</span>
           <span class="info-value" id="infoRes">-</span>
@@ -34,21 +37,95 @@
           <span class="info-label">追加日時</span>
           <span class="info-value" id="infoDate">-</span>
         </div>
+        <div class="info-row" id="infoRefBoostRow" hidden>
+          <span class="info-label">REF_BOOST</span>
+          <span class="info-value" id="infoRefBoost">-</span>
+        </div>
+        <div class="info-row" id="infoGroundingRow" hidden>
+          <span class="info-label">GROUNDING_PX</span>
+          <span class="info-value" id="infoGrounding">-</span>
+        </div>
+        <div class="info-block" id="infoRefBlock" hidden>
+          <span class="info-label">参照画像</span>
+          <div class="info-ref-thumb-wrap">
+            <img id="infoRefImg" class="info-ref-thumb" src="" alt="">
+          </div>
+          <div class="info-ref-path" id="infoRefPath"></div>
+        </div>
+        <div class="info-block" id="infoLoraBlock" hidden>
+          <span class="info-label">LoRA</span>
+          <ul class="info-lora-list" id="infoLoraList"></ul>
+        </div>
       </div>
     </div>
 
-    <div id="sidebarShortcuts">
-      <div class="sidebar-section-label">ショートカット・操作</div>
-      <ul class="shortcut-list">
-        <li><kbd>ホイール</kbd><span>ズームイン / アウト</span></li>
-        <li><kbd>ドラッグ</kbd><span>移動（パン）</span></li>
-        <li><kbd>クリック</kbd><span>ズーム解除（フィット）</span></li>
-        <li><kbd>Ctrl</kbd> + ドラッグ<span>矩形ズーム</span></li>
-      </ul>
+    <div class="sidebar-bottom">
+      <div id="watchFolderBlock" class="favorite-folder-block">
+        <div id="watchFolderRow" class="sidebar-row">
+          <div class="favorite-folder-info">
+            <span class="sidebar-row-label">監視するフォルダを指定する</span>
+            <div id="watchFolderPath" class="favorite-folder-path">-</div>
+          </div>
+          <button id="watchFolderBtn" class="favorite-folder-btn" type="button">選択</button>
+        </div>
+      </div>
+
+      <div id="favoriteFolderBlock" class="favorite-folder-block">
+        <div id="favoriteFolderRow" class="sidebar-row">
+          <div class="favorite-folder-info">
+            <span class="sidebar-row-label">お気に入り画像の保存先を指定する</span>
+            <div id="favoriteFolderPath" class="favorite-folder-path">未設定</div>
+          </div>
+          <button id="favoriteFolderBtn" class="favorite-folder-btn" type="button">選択</button>
+        </div>
+      </div>
+
+      <label id="favoriteViewRow" class="sidebar-row">
+        <span class="sidebar-row-label">お気に入りフォルダを表示</span>
+        <span class="switch">
+          <input type="checkbox" id="favoriteViewToggle">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </span>
+      </label>
+
+      <label id="autoSwitchRow" class="sidebar-row">
+        <span class="sidebar-row-label">新しい画像を自動表示</span>
+        <span class="switch">
+          <input type="checkbox" id="autoSwitchToggle" checked>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </span>
+      </label>
+
+      <div id="sidebarShortcuts">
+        <div class="sidebar-section-label">ショートカット・操作</div>
+        <ul class="shortcut-list">
+          <li><kbd>ホイール</kbd><span>前後の画像に切替</span></li>
+          <li class="shortcut-combo"><span class="shortcut-keys"><kbd>クリック</kbd><span class="shortcut-plus">+</span><kbd>ホイール</kbd></span><span class="shortcut-desc">ズーム（カーソル位置を中心）</span></li>
+          <li><kbd>ドラッグ</kbd><span>移動（パン）</span></li>
+          <li><kbd>クリック</kbd><span>ズーム解除（フィット）</span></li>
+          <li class="shortcut-combo"><span class="shortcut-keys"><kbd>Ctrl</kbd><span class="shortcut-plus">+</span><kbd>ドラッグ</kbd></span><span class="shortcut-desc">矩形ズーム</span></li>
+          <li class="shortcut-combo"><span class="shortcut-keys"><kbd>Shift</kbd><span class="shortcut-plus">+</span><kbd>ドラッグ</kbd></span><span class="shortcut-desc">画像を外部へドラッグ＆ドロップ</span></li>
+          <li><kbd>ダブルクリック</kbd><span>お気に入り保存</span></li>
+        </ul>
+      </div>
     </div>
   </div>
 
+  <button id="sidebarExpandBtn" class="sidebar-expand-btn" type="button" title="詳細タブを表示" aria-label="詳細タブを表示" hidden>&#171;</button>
+
+  <div id="thumbStripResizeHandle"></div>
+  <button id="thumbStripExpandBtn" class="thumbstrip-expand-btn" type="button" title="サムネイル一覧を表示" aria-label="サムネイル一覧を表示" hidden>&#9650;</button>
   <div id="thumbStrip"></div>
+
+  <!-- gen.py のコンソール出力をそのまま表示するターミナルパネル（画面最下部）。縦幅はドラッグで変更可 -->
+  <div id="termResizeHandle"></div>
+  <button id="termExpandBtn" class="term-expand-btn" type="button" title="ターミナルを表示" aria-label="ターミナルを表示" hidden>&#9650;</button>
+  <div id="termPanel" class="term-panel">
+    <div id="genProgress" class="term-header">
+      <span class="term-title">GEN.PY LOG</span>
+    </div>
+    <div id="termBody" class="term-body"></div>
+  </div>
 
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

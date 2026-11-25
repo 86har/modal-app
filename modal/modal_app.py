@@ -15,7 +15,29 @@ import modal
 #   Nvidia T4            0.000164   $0.59     50.8 時間
 
 APP_NAME = "krea2"
-GPU = "A10"  
+import json
+import os
+from pathlib import Path
+
+def _load_config():
+    """config.json を探して読み込む。KREA_CONFIG 環境変数を優先し、
+    無ければこのファイルの親フォルダを順にさかのぼって探す。"""
+    candidates = []
+    env = os.environ.get("KREA_CONFIG")
+    if env:
+        candidates.append(Path(env))
+    candidates += [p / "config.json" for p in Path(__file__).resolve().parents]
+    for path in candidates:
+        if path.is_file():
+            try:
+                return json.loads(path.read_text(encoding="utf-8-sig")), path.parent
+            except Exception as e:
+                print(f"[config] 読み込みに失敗しました: {path}: {e}")
+    return {}, None
+
+_cfg, _cfg_dir = _load_config()
+
+GPU = _cfg.get("GPU") or "A10"
 IDLE_SECONDS = 600
 MODELS = "/models"
 COMFY = "/root/ComfyUI"
@@ -31,6 +53,14 @@ TE_NAME = "qwen3vl_4b_fp8_scaled.safetensors"
 VAE_NAME = "qwen_image_vae.safetensors"
 HF_REPOS = ["Comfy-Org/Krea-2", "Comfy-Org/Krea2"]
 MEGA_DEST = "/outputs/Echs/"
+
+# --- Krea 2 Identity Edit LoRA (civitai.com/models/2761113) ---
+# このLoRAは通常の LoraLoader では動かず、専用のカスタムノード comfyui-krea2edit が必要。
+# 実在人物の写真を本人の同意なく使わないこと(配布元のライセンス・利用規約にも明記あり)。
+LORA_IDENTITY_NAME = "krea2_identity_edit_v2.safetensors"
+LORA_IDENTITY_VERSION_ID = "3409322"   # civitai のモデルバージョンID(v2.0)
+LORA_IDENTITY_FILE_ID = "3301281"      # 同バージョンに General Edit 用LoRAも同梱されているため明示指定
+KREA2EDIT_NODES_REPO = "https://github.com/lbouaraba/comfyui-krea2edit"
 
 app = modal.App(APP_NAME)
 vol = modal.Volume.from_name("krea2-models", create_if_missing=True)
@@ -55,10 +85,16 @@ image = (
     .run_commands(
         f"git clone -q --depth 1 https://github.com/comfyanonymous/ComfyUI {COMFY}",
         f"pip install -q -r {COMFY}/requirements.txt",
+        f"git clone -q --depth 1 {KREA2EDIT_NODES_REPO} {COMFY}/custom_nodes/comfyui-krea2edit",
     )
     .pip_install("huggingface_hub", "requests")
     .env({"HF_HOME": "/tmp/hf_cache", "PIP_NO_CACHE_DIR": "1"})
 )
+
+# 生成の進捗をローカル(gen.py)へ伝えるための共有 Dict。キーは gen.py が発行する progress_id。
+# gen.py 側の PROGRESS_DICT_NAME と同じ値にすること。
+PROGRESS_DICT_NAME = "krea2-progress"
+PROGRESS_MIN_INTERVAL = 0.25   # Dict への書き込み間隔の下限(秒)
 
 def _scrub(msg, *secrets):
     for s in secrets:
@@ -249,21 +285,14 @@ class MegaUploader:
     scaledown_window=IDLE_SECONDS,
     timeout=3600,
     max_containers=1,
+    enable_memory_snapshot=True,                                  # CPUメモリのスナップショット
+    experimental_options={"enable_gpu_snapshot": True},          # GPUメモリも含める
 )
 class Krea:
-    @modal.enter()
-    def setup(self):
-        import asyncio
-        import glob
-        import inspect
+    def _link_model_dirs(self):
+        """ComfyUI の models/ 配下を Volume へのシンボリックリンクにする(何度呼んでも安全)。"""
         import os
         import shutil
-        import struct
-        import sys
-
-        self.civitai_token = os.environ.get("CIVITAI_TOKEN")
-        self.mega_email = os.environ.get("MEGA_EMAIL")
-        self.mega_pass = os.environ.get("MEGA_PASS")
 
         for d in MODEL_DIRS:
             os.makedirs(f"{MODELS}/{d}", exist_ok=True)
@@ -274,10 +303,37 @@ class Krea:
                 shutil.rmtree(link)
             os.symlink(f"{MODELS}/{d}", link)
 
+    @modal.enter(snap=True)
+    def setup(self):
+        """スナップショット作成時(デプロイ後の最初の起動)だけ実行される。
+
+        ここで行った import・モデル読み込み・ウォームアップの結果(CPU/GPUメモリ)が
+        スナップショットとして保存され、2回目以降の起動では復元だけで済む。
+        トークンなどの秘密情報は self に保存しない(スナップショットに残さないため)。
+        """
+        import asyncio
+        import inspect
+        import os
+        import shutil
+        import struct
+        import sys
+        import time
+
+        t0 = time.time()
+
+        def lap(label):
+            print(f"[startup] {label}: {time.time() - t0:.1f}s(累計)", flush=True)
+
+        changed = False   # Volume に書き込んだときだけ commit する
+
+        self._link_model_dirs()
+
         ckpt = f"{MODELS}/diffusion_models/{CKPT_NAME}"
+        if not os.path.exists(ckpt):
+            changed = True
         download_file(
             f"https://civitai.com/api/download/models/{CKPT_VERSION_ID}",
-            ckpt, token=self.civitai_token, label="CKPT",
+            ckpt, token=os.environ.get("CIVITAI_TOKEN"), label="CKPT",
         )
 
         from huggingface_hub import HfApi, hf_hub_download
@@ -287,6 +343,7 @@ class Krea:
                 del wanted[name]
 
         if wanted:
+            changed = True
             for repo in HF_REPOS:
                 try:
                     files = HfApi().list_repo_files(repo)
@@ -313,8 +370,11 @@ class Krea:
         if not os.path.exists(dummy):
             with open(dummy, "wb") as f:
                 f.write(struct.pack("<Q", 2) + b"{}")
+            changed = True
 
-        vol.commit()
+        if changed:
+            vol.commit()
+        lap("モデルファイルの確認")
 
         sys.path.insert(0, COMFY)
         os.chdir(COMFY)
@@ -327,10 +387,108 @@ class Krea:
         self.NCM = nodes.NODE_CLASS_MAPPINGS
         print("ノード読み込みOK。登録数:", len(self.NCM))
 
+        # サンプリングの1ステップごとに呼ばれる ComfyUI のフックを登録する(進捗表示用)。
+        # _progress_ctx が None の間(ウォームアップ中など)は何もしない。
+        import comfy.utils
+        self._progress_ctx = None
+        comfy.utils.set_progress_bar_global_hook(self._on_comfy_progress)
+        lap("ComfyUI import")
+
         self.PERSIST_CLASSES = {"UNETLoader", "CLIPLoader", "VAELoader"}
         self.LOADER_CACHE = {}
         self._run_graph(self._loader_graph())
         print("モデル読み込み完了")
+        lap("モデル読み込み")
+
+        # ComfyUI はローダーを実行しただけでは VRAM に載せず、最初のサンプリングで載せる。
+        # 小さなダミー生成を1回走らせ、GPU転送とCUDA初期化までスナップショットに含める。
+        self._warmup()
+        lap("ウォームアップ(スナップショット直前)")
+
+        # スナップショットは小さいほど復元が速い。
+        # 使い終わったテンソルと、PyTorch がキャッシュしているだけの空きVRAMを手放してから撮る。
+        import gc
+
+        import torch
+        gc.collect()
+        torch.cuda.empty_cache()
+        lap("スナップショット前の掃除")
+
+    @modal.enter(snap=False)
+    def after_restore(self):
+        """スナップショットから復元するたびに実行される(毎回変わりうるものだけここで読む)。"""
+        import os
+
+        self.civitai_token = os.environ.get("CIVITAI_TOKEN")
+        self._link_model_dirs()   # コンテナのファイルシステム側の状態は念のため作り直す
+        print("[startup] スナップショットから復元しました", flush=True)
+
+    # ---- 進捗の通知(失敗しても生成は止めない) ----
+    def _progress_begin(self, progress_id, n):
+        if not progress_id:
+            self._progress_ctx = None
+            return None
+        import time
+        try:
+            pdict = modal.Dict.from_name(PROGRESS_DICT_NAME, create_if_missing=True)
+        except Exception as e:
+            print(f"進捗Dictを開けませんでした(進捗表示なしで続行): {type(e).__name__}")
+            self._progress_ctx = None
+            return None
+        ctx = {"id": progress_id, "dict": pdict, "n": n, "done": 0, "step": 0,
+               "total": 0, "stage": "sampling", "last": 0.0, "t0": time.time()}
+        self._progress_ctx = ctx
+        self._progress_push(ctx, force=True)
+        return ctx
+
+    def _progress_push(self, ctx, force=False):
+        import time
+        now = time.time()
+        if not force and now - ctx["last"] < PROGRESS_MIN_INTERVAL:
+            return
+        ctx["last"] = now
+        try:
+            ctx["dict"][ctx["id"]] = {
+                "stage": ctx["stage"], "n": ctx["n"], "done": ctx["done"],
+                "step": ctx["step"], "total": ctx["total"], "t": now,
+                "loras": ctx.get("loras") or [],   # gen.py が生成開始時にまとめて表示する
+            }
+        except Exception:
+            pass
+
+    def _on_comfy_progress(self, value, total, *args, **kwargs):
+        ctx = getattr(self, "_progress_ctx", None)
+        if not ctx:
+            return
+        ctx["stage"] = "sampling"
+        ctx["step"], ctx["total"] = value, total
+        self._progress_push(ctx, force=(value >= total))
+
+    def _progress_stage(self, ctx, stage, **kw):
+        if not ctx:
+            return
+        ctx["stage"] = stage
+        ctx.update(kw)
+        self._progress_push(ctx, force=True)
+
+    @modal.method()
+    def ping(self):
+        """コンテナを先に起動しておくためだけの空メソッド(gen.py の /api/warmup から呼ぶ)。"""
+        return "ok"
+
+    def _warmup(self):
+        wf = self._loader_graph()
+        wf.update({
+            "4": {"class_type": "CLIPTextEncode", "inputs": {"text": "warmup", "clip": ["2", 0]}},
+            "5": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["4", 0]}},
+            "6": {"class_type": "EmptySD3LatentImage", "inputs": {"width": 512, "height": 512, "batch_size": 1}},
+            "7": {"class_type": "KSampler", "inputs": {
+                "model": ["1", 0], "seed": 0, "steps": 1, "cfg": 1.0,
+                "sampler_name": "euler", "scheduler": "simple",
+                "positive": ["4", 0], "negative": ["5", 0], "latent_image": ["6", 0], "denoise": 1.0}},
+            "8": {"class_type": "VAEDecode", "inputs": {"samples": ["7", 0], "vae": ["3", 0]}},
+        })
+        self._run_graph(wf)
 
     def _loader_graph(self):
         return {
@@ -398,6 +556,18 @@ class Krea:
             items.append((name, buf.getvalue()))
         return items
 
+    def _bytes_to_image_tensor(self, data):
+        """PNG/JPEGのバイト列を ComfyUI の IMAGE テンソル([1,H,W,3], float32 0-1) に変換する。"""
+        import io
+
+        import numpy as np
+        import torch
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+        arr = np.array(img).astype(np.float32) / 255.0
+        return torch.from_numpy(arr)[None, ...]
+
     def _stash_to_volume(self, items):
         """アップロード処理を起動できなかったときの保険。画像を Volume に退避する。"""
         import os
@@ -408,20 +578,92 @@ class Krea:
                 f.write(data)
         vol.commit()
 
+    # ---- LoRA の状態(適用一覧 / ダウンロード済み・これからダウンロード)を gen.py に伝える ----
+    # status: "cached"(Volumeにある) / "pending"(これからダウンロード) / "downloading" /
+    #         "downloaded"(今回ダウンロードした) / "failed"
+    def _lora_entry(self, label, version_id, strength, filename):
+        path = f"{MODELS}/loras/{filename}"
+        exists = os.path.exists(path)
+        return {
+            "label": label, "version_id": str(version_id), "strength": float(strength),
+            "status": "cached" if exists else "pending",
+            "size": os.path.getsize(path) if exists else 0, "sec": 0.0,
+        }
+
+    def _lora_plan(self, loras):
+        plan = []
+        for lora in loras or []:
+            vid = str(lora["version_id"])
+            label = lora.get("name") or f"versionID {vid}"
+            plan.append(self._lora_entry(label, vid, lora.get("strength", 1.0), f"{vid}.safetensors"))
+        return plan
+
+    def _set_progress_loras(self, ctx, plan):
+        if not plan:
+            return
+        for i, e in enumerate(plan, 1):
+            state = "ダウンロード済み" if e["status"] == "cached" else "これからダウンロード"
+            print(f"[LoRA {i}/{len(plan)}] {e['label']} (ver {e['version_id']}, 強度 {e['strength']:.2f}) → {state}",
+                  flush=True)
+        if ctx:
+            ctx["loras"] = plan
+            self._progress_push(ctx, force=True)
+
+    def _fetch_lora(self, path, url, entry=None, ctx=None):
+        """LoRAをダウンロードして Volume に保存する。状態の変化は gen.py に伝える。"""
+        import time
+
+        t0 = time.time()
+        if entry is not None:
+            entry["status"] = "downloading"
+            self._progress_stage(ctx, "downloading")
+        try:
+            download_file(url, path, token=self.civitai_token, label="LORA")
+            vol.commit()
+        except Exception:
+            if entry is not None:
+                entry["status"] = "failed"
+                self._progress_stage(ctx, "downloading")
+            raise
+        if entry is not None:
+            entry.update(status="downloaded", size=os.path.getsize(path), sec=round(time.time() - t0, 1))
+            self._progress_stage(ctx, "sampling")
+
+    def _ensure_lora(self, version_id, file_id=None, ctx=None, entry=None):
+        """civitai の versionID をファイル名として使い、Volumeに無ければその場でダウンロードする。
+        （事前にコンテナを起動して確認する、という二度手間をなくすため、generate() の中で直接呼ぶ）"""
+        version_id = str(version_id)
+        lora_name = f"{version_id}.safetensors"
+        path = f"{MODELS}/loras/{lora_name}"
+        if not os.path.exists(path):
+            print(f"LoRA (versionID={version_id}) が無いため、ダウンロードします")
+            url = f"https://civitai.com/api/download/models/{version_id}"
+            if file_id:
+                url += f"?fileId={file_id}"
+            self._fetch_lora(path, url, entry, ctx)
+        return lora_name
+
     @modal.method()
     def generate(self, prompt, seed=None, steps=8, cfg=1.0, w=1024, h=1024, n=1,
-                 loras=None, mega=True, return_png=False, names=None):
+                 loras=None, mega=True, return_png=False, names=None, progress_id=None):
         import os
         import random
         import time
 
         seed = random.randint(0, 2**32 - 1) if seed is None or seed < 0 else seed
+        pctx = self._progress_begin(progress_id, n)
 
         wf = self._loader_graph()
         model_ref, clip_ref = ["1", 0], ["2", 0]
 
+        # loras: [{"version_id": "...", "file_id": 省略可, "strength": 1.0}, ...]
+        # versionID.safetensors をファイル名として使い、無ければここでダウンロードする
+        plan = self._lora_plan(loras)
+        self._set_progress_loras(pctx, plan)   # ダウンロード前に「どれが済み/未」かを通知
         if loras:
-            for i, (lora_name, strength) in enumerate(loras):
+            for i, lora in enumerate(loras):
+                lora_name = self._ensure_lora(lora["version_id"], lora.get("file_id"), pctx, plan[i])
+                strength = lora.get("strength", 1.0)
                 node_id = f"lora_{i}"
                 wf[node_id] = {
                     "class_type": "LoraLoader",
@@ -479,8 +721,10 @@ class Krea:
             images.extend(list(imgs))
             remaining -= cur
             chunk_index += 1
+            self._progress_stage(pctx, "sampling", done=n - remaining, step=0)
         print(f"seed={seed}  {n}枚(同時生成 最大{batch_limit}枚ずつ)  {time.time()-t0:.0f}秒")
 
+        self._progress_stage(pctx, "encoding", done=n)
         items = self._encode_pngs(images, names)
 
         # MEGAへのアップロードは GPU なしの別コンテナ(MegaUploader)に任せる。
@@ -496,6 +740,120 @@ class Krea:
                     f"アップロード処理の起動に失敗(画像は{STAGE_DIR}に退避): {type(e).__name__}"
                 ) from None
 
+        self._progress_stage(pctx, "done")
+        self._progress_ctx = None
+        return {
+            "pngs": [data for _, data in items] if return_png else [],
+            "upload_call_id": upload_call_id,
+        }
+
+    @modal.method()
+    def generate_edit(self, instruction, image, image_b=None, seed=None, steps=8, cfg=1.0,
+                       w=1024, h=1024, ref_boost=2.0, grounding_px=768, lora_strength=1.0,
+                       mega=True, return_png=True, name=None, progress_id=None, loras=None):
+        """krea2_identity_edit LoRA(要 comfyui-krea2edit ノード)による画像編集。
+
+        image: 編集対象の画像(PNG/JPEGのバイト列)。二枚参照モードでは「シーン」側。
+        image_b: 省略可。二枚参照モード(人物をシーンに合成する等)の「人物」側。
+        instruction: 「この人物を夜の屋台に立たせて」のような平文の指示。
+        loras: 省略可。追加で重ねるLoRA。[{"version_id": "...", "file_id": 省略可, "strength": 1.0}, ...]
+               画像編集用LoRAの後ろに連結する(モデル側のみに適用。テキストエンコーダ側は変えない)。
+        """
+        import os
+        import random
+
+        seed = random.randint(0, 2**32 - 1) if seed is None or seed < 0 else seed
+
+        pctx = self._progress_begin(progress_id, 1)
+        entry = self._lora_entry("画像編集用LoRA(krea2_identity_edit)", LORA_IDENTITY_VERSION_ID,
+                                 lora_strength, LORA_IDENTITY_NAME)
+        user_plan = self._lora_plan(loras)
+        self._set_progress_loras(pctx, [entry] + user_plan)
+
+        # 画像編集用LoRA: Volumeに無いときだけ、この生成コンテナの中でダウンロードしてそのまま生成する
+        # （事前確認のためにコンテナを起動しなくて済む。あれば何もしない）
+        lora_path = f"{MODELS}/loras/{LORA_IDENTITY_NAME}"
+        if not os.path.exists(lora_path):
+            print("画像編集用LoRAが無いため、ダウンロードします（初回のみ）")
+            self._fetch_lora(
+                lora_path,
+                f"https://civitai.com/api/download/models/{LORA_IDENTITY_VERSION_ID}?fileId={LORA_IDENTITY_FILE_ID}",
+                entry, pctx,
+            )
+
+        wf = self._loader_graph()
+        wf["lora"] = {
+            "class_type": "LoraLoaderModelOnly",
+            "inputs": {"model": ["1", 0], "lora_name": LORA_IDENTITY_NAME, "strength_model": lora_strength},
+        }
+        model_ref = ["lora", 0]
+
+        # 追加LoRA: versionID.safetensors が Volume に無ければ、ここでダウンロードして連結する
+        for i, user_lora in enumerate(loras or []):
+            user_name = self._ensure_lora(user_lora["version_id"], user_lora.get("file_id"), pctx, user_plan[i])
+            node_id = f"user_lora_{i}"
+            wf[node_id] = {
+                "class_type": "LoraLoaderModelOnly",
+                "inputs": {"model": model_ref, "lora_name": user_name,
+                           "strength_model": user_lora.get("strength", 1.0)},
+            }
+            model_ref = [node_id, 0]
+
+        img_t = self._bytes_to_image_tensor(image)
+        img_b_t = self._bytes_to_image_tensor(image_b) if image_b else None
+
+        wf["src_latent"] = {"class_type": "VAEEncode", "inputs": {"pixels": img_t, "vae": ["3", 0]}}
+        wf["target_latent"] = {"class_type": "EmptySD3LatentImage", "inputs": {"width": w, "height": h, "batch_size": 1}}
+
+        patch_inputs = {
+            "model": model_ref,
+            "source_latent": ["src_latent", 0],
+            "vae": ["3", 0],
+            "source_image": img_t,
+            "target_latent": ["target_latent", 0],
+            "ref_boost": ref_boost,
+            "fit_mode": "fit",
+        }
+        pos_inputs = {"clip": ["2", 0], "image": img_t, "prompt": instruction, "grounding_px": grounding_px}
+        neg_inputs = {"clip": ["2", 0], "image": img_t, "prompt": "", "grounding_px": grounding_px}
+
+        if img_b_t is not None:
+            wf["src_latent_b"] = {"class_type": "VAEEncode", "inputs": {"pixels": img_b_t, "vae": ["3", 0]}}
+            patch_inputs["source_latent_b"] = ["src_latent_b", 0]
+            patch_inputs["source_image_b"] = img_b_t
+            pos_inputs["image_b"] = img_b_t
+            neg_inputs["image_b"] = img_b_t
+
+        wf["patched_model"] = {"class_type": "Krea2EditModelPatch", "inputs": patch_inputs}
+        wf["pos_cond"] = {"class_type": "Krea2EditGroundedEncode", "inputs": pos_inputs}
+        wf["neg_cond"] = {"class_type": "Krea2EditGroundedEncode", "inputs": neg_inputs}
+        wf["sampler"] = {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["patched_model", 0], "positive": ["pos_cond", 0], "negative": ["neg_cond", 0],
+                "latent_image": ["target_latent", 0], "seed": seed, "steps": steps, "cfg": cfg,
+                "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+            },
+        }
+        wf["decode"] = {"class_type": "VAEDecode", "inputs": {"samples": ["sampler", 0], "vae": ["3", 0]}}
+
+        out = self._run_graph(wf)["decode"][0]
+        self._progress_stage(pctx, "encoding", done=1)
+        items = self._encode_pngs(list(out), [name] if name else None)
+
+        upload_call_id = None
+        if mega:
+            try:
+                upload_call_id = MegaUploader().upload.spawn(items).object_id
+                print(f"{len(items)}枚をアップロード処理(CPU)に渡しました")
+            except Exception as e:
+                self._stash_to_volume(items)
+                raise RuntimeError(
+                    f"アップロード処理の起動に失敗(画像は{STAGE_DIR}に退避): {type(e).__name__}"
+                ) from None
+
+        self._progress_stage(pctx, "done")
+        self._progress_ctx = None
         return {
             "pngs": [data for _, data in items] if return_png else [],
             "upload_call_id": upload_call_id,
@@ -572,10 +930,12 @@ class Krea:
         return info
 
     @modal.method()
-    def download_lora(self, lora_name, version_id, force=False):
+    def download_lora(self, lora_name, version_id, file_id=None, force=False):
         path = f"{MODELS}/loras/{lora_name}"
-        download_file(f"https://civitai.com/api/download/models/{version_id}", path,
-                      token=self.civitai_token, label="LORA", force=force)
+        url = f"https://civitai.com/api/download/models/{version_id}"
+        if file_id:
+            url += f"?fileId={file_id}"   # 1バージョンに複数ファイルがある場合に対象を明示
+        download_file(url, path, token=self.civitai_token, label="LORA", force=force)
         vol.commit()
         return path
 
@@ -623,6 +983,44 @@ def main(prompt: str, seed: int = -1, steps: int = 8, w: int = 880, h: int = 124
 
     # アップロードは別コンテナで非同期に動いている。
     # ここで待たないと、modal run の終了と同時に中断されてしまう。
+    call_id = result.get("upload_call_id")
+    if call_id:
+        print("MEGAアップロードの完了を待っています...")
+        modal.FunctionCall.from_id(call_id).get()
+        print("MEGAアップロード完了")
+
+
+@app.local_entrypoint()
+def edit(image: str, instruction: str, image_b: str = None, seed: int = -1, steps: int = 8,
+         w: int = 1024, h: int = 1024, ref_boost: float = 2.0, grounding_px: int = 768,
+         mega: bool = True, save_local: bool = True):
+    """krea2_identity_edit LoRA を使った画像編集。
+    例: modal run moda.py::edit --image photo.png --instruction "この人を夜の屋台に立たせて"
+    """
+    import time
+
+    krea = Krea()
+    # 初回のみダウンロード(Volumeに既にあればスキップされる)
+    krea.download_lora.remote(LORA_IDENTITY_NAME, LORA_IDENTITY_VERSION_ID, LORA_IDENTITY_FILE_ID)
+
+    with open(image, "rb") as f:
+        img_bytes = f.read()
+    img_b_bytes = None
+    if image_b:
+        with open(image_b, "rb") as f:
+            img_b_bytes = f.read()
+
+    result = krea.generate_edit.remote(
+        instruction, img_bytes, image_b=img_b_bytes, seed=seed, steps=steps, w=w, h=h,
+        ref_boost=ref_boost, grounding_px=grounding_px, mega=mega, return_png=save_local,
+    )
+    if save_local:
+        for i, png in enumerate(result["pngs"]):
+            name = f"{time.strftime('%Y%m%d-%H%M%S')}_edit_{i}.png"
+            with open(name, "wb") as f:
+                f.write(png)
+            print("保存:", name)
+
     call_id = result.get("upload_call_id")
     if call_id:
         print("MEGAアップロードの完了を待っています...")
