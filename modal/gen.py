@@ -1346,7 +1346,7 @@ def main():
     print("\033[42m  準備完了  \033[0m")
     print("Modal Dashboard      -> \033[36mhttps://modal.com/apps/haru028/main\033[0m")
     print("Modal Billing usage  -> \033[36mhttps://modal.com/settings/usage\033[0m")
-    print("Ctrl+リンクをクリックでページにJump!")
+    print("Ctrl+リンクをクリックでページにJump!!!")
     print("Ctrl+Cでプログラムを停止")
     try:
         server.serve_forever()
