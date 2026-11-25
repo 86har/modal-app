@@ -7,6 +7,9 @@ set "REPO_URL=https://github.com/86har/modal-app"
 set "TMP_REPO=%ENGINE%\_repo"
 cd /d "%ROOT%"
 
+REM 前回の更新で残った古い update.bat.new を捨てる
+if exist "%ROOT%update.bat.new" del "%ROOT%update.bat.new" >nul 2>&1
+
 if not exist "%ENGINE%" (
     echo engine フォルダがありません。先に setup.bat を実行してください。
     goto :error
@@ -51,6 +54,9 @@ REM ===== 3. config.json を参照するようにパッチを適用 =====
 set "PATCH_RC=%errorlevel%"
 del "%ENGINE%\_patch.py" >nul 2>&1
 if not "%PATCH_RC%"=="0" goto :error
+
+REM 取得した最新コミットの SHA を記録 (run.bat の自動更新判定に使う)
+for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "try { (Invoke-RestMethod -Uri 'https://api.github.com/repos/86har/modal-app/commits/HEAD' -Headers @{Accept='application/vnd.github.sha'} -TimeoutSec 5).ToString().Trim() } catch { '' }"`) do >"%ROOT%.repo_sha.txt" echo %%S
 
 echo.
 echo 更新が完了しました。
@@ -241,7 +247,9 @@ def remove(path):
 
 
 def do_place(engine, repo):
-    gen = shallowest(repo, False, {"gen.py"})
+    gen = repo / "modal" / "gen.py"      # modal フォルダがあればそれを優先(直下の古い gen.py は無視)
+    if not gen.is_file():
+        gen = shallowest(repo, False, {"gen.py"})
     if gen is None:
         print("[place] リポジトリ内に gen.py が見つかりません")
         return 1
@@ -281,10 +289,17 @@ def do_runner(root, repo):
         if not src.is_file():
             print(f"[runner] {name} がありません(スキップ)")
             continue
-        text = src.read_bytes().decode("utf-8-sig").replace("\r\n", "\n").replace("\n", "\r\n")
+        if name == "setup.bat" and os.environ.get("KREA_IN_SETUP"):
+            print("[runner] setup.bat は実行中のためスキップします")
+            continue
+        data = src.read_bytes().decode("utf-8-sig").replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
+        cur = root / name
+        if cur.is_file() and cur.read_bytes() == data:
+            print(f"[runner] {name} は最新です")
+            continue
         # update.bat は実行中なので .new として置き、終了時に差し替える
         dst = root / ("update.bat.new" if name == "update.bat" else name)
-        dst.write_bytes(text.encode("utf-8"))
+        dst.write_bytes(data)
         print(f"[runner] {name} を更新しました")
     return 0
 
