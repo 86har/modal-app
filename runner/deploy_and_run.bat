@@ -13,9 +13,17 @@ if not exist "%ENGINE%\venv\Scripts\python.exe" (
 
 REM ===== GitHub に新しいコードがあれば自動更新 =====
 REM (更新で run.bat 自身も置き換わるため、更新後は新しい版で起動し直す)
+REM 自動更新の有効/無効: config.json の "AUTO_UPDATE": false か、環境変数 KREA_NO_UPDATE=1 で無効化
+set "AUTO_UPDATE=1"
+if exist "%ROOT%config.json" (
+    for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "try { $c = Get-Content -LiteralPath '%ROOT%config.json' -Raw -Encoding UTF8 | ConvertFrom-Json; if ([string]$c.AUTO_UPDATE -in 'false','0','off','no') { '0' } else { '1' } } catch { '1' }"`) do set "AUTO_UPDATE=%%A"
+)
+if "%KREA_NO_UPDATE%"=="1" set "AUTO_UPDATE=0"
+if "!AUTO_UPDATE!"=="0" echo ※ 自動更新は無効です。
+
 set "SHA_FILE=%ROOT%.repo_sha.txt"
 set "REMOTE_SHA="
-for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "try { (Invoke-RestMethod -Uri 'https://api.github.com/repos/86har/modal-app/commits/HEAD' -Headers @{Accept='application/vnd.github.sha'} -TimeoutSec 5).ToString().Trim() } catch { '' }"`) do set "REMOTE_SHA=%%S"
+if "!AUTO_UPDATE!"=="1" for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "try { (Invoke-RestMethod -Uri 'https://api.github.com/repos/86har/modal-app/commits/HEAD' -Headers @{Accept='application/vnd.github.sha'} -TimeoutSec 5).ToString().Trim() } catch { '' }"`) do set "REMOTE_SHA=%%S"
 
 set "LOCAL_SHA="
 if exist "%SHA_FILE%" set /p LOCAL_SHA=<"%SHA_FILE%"
