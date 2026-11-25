@@ -1,12 +1,14 @@
 @echo off
 chcp 65001 >nul
-set "ROOT=%~dp0"
+set "BOOT=%~dp0"
+for %%I in ("%~dp0..") do set "ROOT=%%~fI\"
 set "ENGINE=%ROOT%engine"
+set "EXT=%ROOT%extentions"
 set "WANT=3.13.17"
-cd /d "%ROOT%"
+cd /d "%BOOT%"
 
 REM ===== 0. config.json の作成(無い場合のみ) =====
-if exist "%ROOT%config.json" goto :cfg_done
+if exist "%BOOT%config.json" goto :cfg_done
 set "CFG_WATCH=%USERPROFILE%\Downloads\outputs"
 set "CFG_GPU=A10"
 set "IN="
@@ -15,7 +17,7 @@ if defined IN set "CFG_WATCH=%IN%"
 set "IN="
 set /p "IN=GPU の種類 (T4 / L4 / A10 / A100 / H100 など) [%CFG_GPU%]: "
 if defined IN set "CFG_GPU=%IN%"
-powershell -NoProfile -Command "[pscustomobject]@{WATCH_DIR=$env:CFG_WATCH;GPU=$env:CFG_GPU;AUTO_UPDATE=$true} | ConvertTo-Json | Set-Content -Encoding UTF8 -LiteralPath '%ROOT%config.json'" || goto :error
+powershell -NoProfile -Command "[pscustomobject]@{WATCH_DIR=$env:CFG_WATCH;GPU=$env:CFG_GPU} | ConvertTo-Json | Set-Content -Encoding UTF8 -LiteralPath '%BOOT%config.json'" || goto :error
 echo config.json を作成しました。
 :cfg_done
 
@@ -59,9 +61,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "%PS%" || goto :error
 
 REM ===== 6. GitHub から取得 → engine へ配置 → config.json 参照パッチ =====
 REM (update.bat と同じ処理を呼び出します)
-REM 実行中の setup.bat 自身を update.bat が上書きしないようにする
-set "KREA_IN_SETUP=1"
-call "%ROOT%update.bat" nopause || goto :error
+call "%BOOT%update.bat" nopause || goto :error
 
 echo.
 echo 完了しました。run.bat で起動できます。

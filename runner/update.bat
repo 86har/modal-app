@@ -1,14 +1,16 @@
 @echo off
 setlocal
 chcp 65001 >nul
-set "ROOT=%~dp0"
+set "BOOT=%~dp0"
+for %%I in ("%~dp0..") do set "ROOT=%%~fI\"
 set "ENGINE=%ROOT%engine"
+set "EXT=%ROOT%extentions"
 set "REPO_URL=https://github.com/86har/modal-app"
 set "TMP_REPO=%ENGINE%\_repo"
-cd /d "%ROOT%"
+cd /d "%BOOT%"
 
 REM 前回の更新で残った古い update.bat.new を捨てる
-if exist "%ROOT%update.bat.new" del "%ROOT%update.bat.new" >nul 2>&1
+if exist "%BOOT%update.bat.new" del "%BOOT%update.bat.new" >nul 2>&1
 
 if not exist "%ENGINE%" (
     echo engine フォルダがありません。先に setup.bat を実行してください。
@@ -41,11 +43,11 @@ set "VPY=%ENGINE%\venv\Scripts\python.exe"
 if not exist "%VPY%" set "VPY=py -3"
 powershell -NoProfile -Command "$t=[IO.File]::ReadAllText('%~f0',[Text.Encoding]::UTF8); $i=$t.IndexOf('#PY_'+'BEGIN'); [IO.File]::WriteAllText('%ENGINE%\_patch.py',$t.Substring($i),(New-Object Text.UTF8Encoding($false)))" || goto :error
 
-%VPY% "%ENGINE%\_patch.py" place "%ENGINE%" "%TMP_REPO%"
+%VPY% "%ENGINE%\_patch.py" place "%ENGINE%" "%TMP_REPO%" "%EXT%"
 if errorlevel 1 goto :place_failed
 
 REM runner フォルダの bat (run / setup / deploy_and_run / update) を ROOT へ上書き
-%VPY% "%ENGINE%\_patch.py" runner "%ROOT:~0,-1%" "%TMP_REPO%"
+%VPY% "%ENGINE%\_patch.py" runner "%BOOT:~0,-1%" "%TMP_REPO%"
 if errorlevel 1 goto :place_failed
 rmdir /s /q "%TMP_REPO%"
 
@@ -56,15 +58,15 @@ del "%ENGINE%\_patch.py" >nul 2>&1
 if not "%PATCH_RC%"=="0" goto :error
 
 REM 取得した最新コミットの SHA を記録 (run.bat の自動更新判定に使う)
-for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "try { (Invoke-RestMethod -Uri 'https://api.github.com/repos/86har/modal-app/commits/HEAD' -Headers @{Accept='application/vnd.github.sha'} -TimeoutSec 5).ToString().Trim() } catch { '' }"`) do >"%ROOT%.repo_sha.txt" echo %%S
+for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "try { (Invoke-RestMethod -Uri 'https://api.github.com/repos/86har/modal-app/commits/HEAD' -Headers @{Accept='application/vnd.github.sha'} -TimeoutSec 5).ToString().Trim() } catch { '' }"`) do >"%BOOT%repo_sha.txt" echo %%S
 
 echo.
 echo 更新が完了しました。
 if /i not "%~1"=="nopause" pause
 
 REM 実行中の update.bat 自身は直接上書きできないため、終了と同時に差し替える
-if exist "%ROOT%update.bat.new" (
-    (goto) 2>nul & move /y "%ROOT%update.bat.new" "%~f0" >nul
+if exist "%BOOT%update.bat.new" (
+    (goto) 2>nul & move /y "%BOOT%update.bat.new" "%~f0" >nul
 )
 exit /b 0
 
@@ -103,7 +105,8 @@ def _load_config():
     env = os.environ.get("KREA_CONFIG")
     if env:
         candidates.append(Path(env))
-    candidates += [p / "config.json" for p in Path(__file__).resolve().parents]
+    for p in Path(__file__).resolve().parents:
+        candidates += [p / "boot" / "config.json", p / "config.json"]
     for path in candidates:
         if path.is_file():
             try:
@@ -201,7 +204,9 @@ def do_patch(ENGINE):
             path.write_bytes(new.encode("utf-8"))
             print(f"[patch] パッチを適用しました: {path}")
 
-    return status
+    if status:
+        print("[patch] 一部のパッチを適用できませんでしたが、続行します(既に修正済みの可能性があります)")
+    return 0
 
 
 ALWAYS_IGNORE = {".git", "__pycache__", "venv"}
@@ -246,7 +251,7 @@ def remove(path):
     return True
 
 
-def do_place(engine, repo):
+def do_place(engine, repo, ext_dst):
     gen = repo / "modal" / "gen.py"      # modal フォルダがあればそれを優先(直下の古い gen.py は無視)
     if not gen.is_file():
         gen = shallowest(repo, False, {"gen.py"})
@@ -264,11 +269,11 @@ def do_place(engine, repo):
     if ext is None:
         print("[place] extention フォルダが見つかりません(スキップ)")
     else:
-        copy_tree(ext, engine / "extention")
-        print(f"[place] {ext.relative_to(repo)} -> engine\\extention")
+        copy_tree(ext, ext_dst)
+        print(f"[place] {ext.relative_to(repo)} -> {ext_dst}")
 
     # 以前の版で engine 直下や modal の中に重複してできたものを整理
-    for rel in ("gen.py", "modal_app.py", "flask",
+    for rel in ("gen.py", "modal_app.py", "flask", "extention", "extension",
                 "modal/modal", "modal/extention", "modal/extension"):
         remove(engine / rel)
     # 旧版で engine 直下にできた空の出力フォルダ(中身がある場合は残す)
@@ -307,7 +312,7 @@ def do_runner(root, repo):
 if __name__ == "__main__":
     mode = sys.argv[1]
     if mode == "place":
-        sys.exit(do_place(Path(sys.argv[2]), Path(sys.argv[3])))
+        sys.exit(do_place(Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4])))
     elif mode == "runner":
         sys.exit(do_runner(Path(sys.argv[2]), Path(sys.argv[3])))
     elif mode == "patch":

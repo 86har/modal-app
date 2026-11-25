@@ -1,9 +1,11 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableDelayedExpansion
-set "ROOT=%~dp0"
+set "BOOT=%~dp0"
+for %%I in ("%~dp0..") do set "ROOT=%%~fI\"
 set "ENGINE=%ROOT%engine"
-cd /d "%ROOT%"
+set "EXT=%ROOT%extentions"
+cd /d "%BOOT%"
 
 if not exist "%ENGINE%\venv\Scripts\python.exe" (
     echo 仮想環境が見つかりません。先に setup.bat を実行してください。
@@ -15,30 +17,34 @@ REM ===== GitHub に新しいコードがあれば自動更新 =====
 REM (更新で run.bat 自身も置き換わるため、更新後は新しい版で起動し直す)
 REM 自動更新の有効/無効: config.json の "AUTO_UPDATE": false か、環境変数 KREA_NO_UPDATE=1 で無効化
 set "AUTO_UPDATE=1"
-if exist "%ROOT%config.json" (
-    for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "try { $c = Get-Content -LiteralPath '%ROOT%config.json' -Raw -Encoding UTF8 | ConvertFrom-Json; if ([string]$c.AUTO_UPDATE -in 'false','0','off','no') { '0' } else { '1' } } catch { '1' }"`) do set "AUTO_UPDATE=%%A"
+if exist "%BOOT%config.json" (
+    for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "try { $c = Get-Content -LiteralPath '%BOOT%config.json' -Raw -Encoding UTF8 | ConvertFrom-Json; if ([string]$c.AUTO_UPDATE -in 'false','0','off','no') { '0' } else { '1' } } catch { '1' }"`) do set "AUTO_UPDATE=%%A"
 )
 if "%KREA_NO_UPDATE%"=="1" set "AUTO_UPDATE=0"
 if "!AUTO_UPDATE!"=="0" echo ※ 自動更新は無効です。
 
-set "SHA_FILE=%ROOT%.repo_sha.txt"
+set "SHA_FILE=%BOOT%repo_sha.txt"
 set "REMOTE_SHA="
 if "!AUTO_UPDATE!"=="1" for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "try { (Invoke-RestMethod -Uri 'https://api.github.com/repos/86har/modal-app/commits/HEAD' -Headers @{Accept='application/vnd.github.sha'} -TimeoutSec 5).ToString().Trim() } catch { '' }"`) do set "REMOTE_SHA=%%S"
 
 set "LOCAL_SHA="
 if exist "%SHA_FILE%" set /p LOCAL_SHA=<"%SHA_FILE%"
 
-if not defined KREA_UPDATED if defined REMOTE_SHA if /i not "!REMOTE_SHA!"=="!LOCAL_SHA!" (
+if not defined KREA_UPDATE_DONE if defined REMOTE_SHA if /i not "!REMOTE_SHA!"=="!LOCAL_SHA!" (
     echo 新しいコードを検出したため、更新します。
-    call "%ROOT%update.bat" nopause
-    if errorlevel 1 (
-        echo 更新に失敗しました。現在のバージョンで起動します。
-    ) else (
+    call "%BOOT%update.bat" nopause
+    set "UPD_RC=!errorlevel!"
+    set "KREA_UPDATE_DONE=1"
+    if "!UPD_RC!"=="0" (
         >"%SHA_FILE%" echo !REMOTE_SHA!
         set "KREA_UPDATED=1"
-        start "" "%~f0" %*
-        exit /b 0
+    ) else (
+        echo 更新に失敗しました。現在のバージョンで起動します。
     )
+    REM 更新で bat 自身が書き換わっている可能性があるため、成否にかかわらず起動し直して終了する
+    REM (このあと元のファイルの続きを読むと、書き換わった内容の途中を実行して壊れる)
+    start "" "%~f0" %*
+    exit /b 0
 )
 
 set "GEN="
@@ -50,10 +56,10 @@ if not defined GEN (
     exit /b 1
 )
 
-if not exist "%ROOT%config.json" echo ※ config.json が無いため、既定の設定で起動します。
+if not exist "%BOOT%config.json" echo ※ config.json が無いため、既定の設定で起動します。
 
 REM プログラムから参照できるように config.json の場所を環境変数で渡す
-set "KREA_CONFIG=%ROOT%config.json"
+set "KREA_CONFIG=%BOOT%config.json"
 set "PYTHONUTF8=1"
 set "VIRTUAL_ENV=%ENGINE%\venv"
 set "PATH=%ENGINE%\venv\Scripts;%PATH%"
@@ -61,11 +67,11 @@ set "PATH=%ENGINE%\venv\Scripts;%PATH%"
 for %%F in ("%GEN%") do set "GENDIR=%%~dpF"
 
 REM config.json の内容が前回起動時から変わっていたら、gen.py に -d (modal deploy) を渡す
-set "HASH_FILE=%ROOT%.config_hash.txt"
+set "HASH_FILE=%BOOT%config_hash.txt"
 set "DEPLOY_FLAG="
-if exist "%ROOT%config.json" (
+if exist "%BOOT%config.json" (
     set "NEWHASH="
-    for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "(Get-FileHash -LiteralPath '%ROOT%config.json' -Algorithm SHA256).Hash"`) do set "NEWHASH=%%H"
+    for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "(Get-FileHash -LiteralPath '%BOOT%config.json' -Algorithm SHA256).Hash"`) do set "NEWHASH=%%H"
 
     set "OLDHASH="
     if exist "!HASH_FILE!" set /p OLDHASH=<"!HASH_FILE!"
