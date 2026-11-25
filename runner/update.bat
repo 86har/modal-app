@@ -47,7 +47,7 @@ powershell -NoProfile -Command "$t=[IO.File]::ReadAllText('%~f0',[Text.Encoding]
 if errorlevel 1 goto :place_failed
 
 REM runner フォルダの bat (run / setup / deploy_and_run / update) を ROOT へ上書き
-%VPY% "%ENGINE%\_patch.py" runner "%BOOT:~0,-1%" "%TMP_REPO%"
+%VPY% "%ENGINE%\_patch.py" runner "%ROOT:~0,-1%" "%BOOT:~0,-1%" "%TMP_REPO%"
 if errorlevel 1 goto :place_failed
 rmdir /s /q "%TMP_REPO%"
 
@@ -284,12 +284,15 @@ def do_place(engine, repo, ext_dst):
     return 0
 
 
-def do_runner(root, repo):
+def do_runner(root, boot, repo):
     d = shallowest(repo, True, {"runner"})
     if d is None:
         print("[runner] runner フォルダが見つかりません(スキップ)")
         return 0
-    for name in ("run.bat", "update.bat", "setup.bat", "deploy_and_run.bat"):
+    # run.bat は ROOT、それ以外は boot へ置く
+    dests = {"run.bat": root, "update.bat": boot,
+             "setup.bat": boot, "deploy_and_run.bat": boot}
+    for name, folder in dests.items():
         src = d / name
         if not src.is_file():
             print(f"[runner] {name} がありません(スキップ)")
@@ -298,14 +301,19 @@ def do_runner(root, repo):
             print("[runner] setup.bat は実行中のためスキップします")
             continue
         data = src.read_bytes().decode("utf-8-sig").replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
-        cur = root / name
+        cur = folder / name
         if cur.is_file() and cur.read_bytes() == data:
             print(f"[runner] {name} は最新です")
             continue
         # update.bat は実行中なので .new として置き、終了時に差し替える
-        dst = root / ("update.bat.new" if name == "update.bat" else name)
+        dst = folder / ("update.bat.new" if name == "update.bat" else name)
         dst.write_bytes(data)
         print(f"[runner] {name} を更新しました")
+    # 旧配置で boot に残った run.bat を削除
+    old = boot / "run.bat"
+    if old.is_file():
+        old.unlink()
+        print("[runner] boot\\run.bat(旧配置)を削除しました")
     return 0
 
 
@@ -314,6 +322,6 @@ if __name__ == "__main__":
     if mode == "place":
         sys.exit(do_place(Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4])))
     elif mode == "runner":
-        sys.exit(do_runner(Path(sys.argv[2]), Path(sys.argv[3])))
+        sys.exit(do_runner(Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4])))
     elif mode == "patch":
         sys.exit(do_patch(Path(sys.argv[2])))

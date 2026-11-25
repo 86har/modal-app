@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableDelayedExpansion
-set "BOOT=%~dp0"
-for %%I in ("%~dp0..") do set "ROOT=%%~fI\"
+set "ROOT=%~dp0"
+set "BOOT=%ROOT%boot\"
 set "ENGINE=%ROOT%engine"
 set "EXT=%ROOT%extentions"
 cd /d "%BOOT%"
@@ -32,18 +32,17 @@ if exist "%SHA_FILE%" set /p LOCAL_SHA=<"%SHA_FILE%"
 
 if not defined KREA_UPDATE_DONE if defined REMOTE_SHA if /i not "!REMOTE_SHA!"=="!LOCAL_SHA!" (
     echo 新しいコードを検出したため、更新します。
+    REM 先に SHA を記録する。再起動後は必ず一致するので、二度目の更新に入らない
+    >"%SHA_FILE%" echo !REMOTE_SHA!
     call "%BOOT%update.bat" nopause
-    set "UPD_RC=!errorlevel!"
-    set "KREA_UPDATE_DONE=1"
-    if "!UPD_RC!"=="0" (
-        >"%SHA_FILE%" echo !REMOTE_SHA!
-        set "KREA_UPDATED=1"
-    ) else (
+    if errorlevel 1 (
         echo 更新に失敗しました。現在のバージョンで起動します。
+        set "KREA_UPDATED="
+    ) else (
+        set "KREA_UPDATED=1"
     )
-    REM 更新で bat 自身が書き換わっている可能性があるため、成否にかかわらず起動し直して終了する
-    REM (このあと元のファイルの続きを読むと、書き換わった内容の途中を実行して壊れる)
-    start "" "%~f0" %*
+    REM 更新で bat 自身が書き換わっている可能性があるため、起動し直して終了する
+    start "" cmd /c "set KREA_UPDATE_DONE=1& set KREA_UPDATED=!KREA_UPDATED!& call "%~f0" %*"
     exit /b 0
 )
 

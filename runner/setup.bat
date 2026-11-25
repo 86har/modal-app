@@ -61,6 +61,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "%PS%" || goto :error
 
 REM ===== 6. GitHub から取得 → engine へ配置 → config.json 参照パッチ =====
 REM (update.bat と同じ処理を呼び出します)
+set "KREA_IN_SETUP=1"
 call "%BOOT%update.bat" nopause || goto :error
 
 echo.
