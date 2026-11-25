@@ -13,9 +13,6 @@ if not exist "%ENGINE%\venv\Scripts\python.exe" (
     exit /b 1
 )
 
-REM ===== GitHub に新しいコードがあれば自動更新 =====
-REM (更新で run.bat 自身も置き換わるため、更新後は新しい版で起動し直す)
-REM 自動更新の有効/無効: config.json の "AUTO_UPDATE": false か、環境変数 KREA_NO_UPDATE=1 で無効化
 set "AUTO_UPDATE=1"
 if exist "%BOOT%config.json" (
     for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "try { $c = Get-Content -LiteralPath '%BOOT%config.json' -Raw -Encoding UTF8 | ConvertFrom-Json; if ([string]$c.AUTO_UPDATE -in 'false','0','off','no') { '0' } else { '1' } } catch { '1' }"`) do set "AUTO_UPDATE=%%A"
@@ -31,7 +28,7 @@ set "LOCAL_SHA="
 if exist "%SHA_FILE%" set /p LOCAL_SHA=<"%SHA_FILE%"
 
 if not defined KREA_UPDATE_DONE if defined REMOTE_SHA if /i not "!REMOTE_SHA!"=="!LOCAL_SHA!" (
-    echo 新しいコードを検出したため、更新します。
+    echo 新しいバージョンを検出したため、更新します。
     call "%BOOT%update.bat" nopause
     set "UPD_RC=!errorlevel!"
     set "KREA_UPDATE_DONE=1"
@@ -41,8 +38,6 @@ if not defined KREA_UPDATE_DONE if defined REMOTE_SHA if /i not "!REMOTE_SHA!"==
     ) else (
         echo 更新に失敗しました。現在のバージョンで起動します。
     )
-    REM 更新で bat 自身が書き換わっている可能性があるため、成否にかかわらず起動し直して終了する
-    REM (このあと元のファイルの続きを読むと、書き換わった内容の途中を実行して壊れる)
     start "" "%~f0" %*
     exit /b 0
 )
@@ -58,7 +53,6 @@ if not defined GEN (
 
 if not exist "%BOOT%config.json" echo ※ config.json が無いため、既定の設定で起動します。
 
-REM プログラムから参照できるように config.json の場所を環境変数で渡す
 set "KREA_CONFIG=%BOOT%config.json"
 set "PYTHONUTF8=1"
 set "VIRTUAL_ENV=%ENGINE%\venv"
@@ -66,7 +60,6 @@ set "PATH=%ENGINE%\venv\Scripts;%PATH%"
 
 for %%F in ("%GEN%") do set "GENDIR=%%~dpF"
 
-REM config.json のハッシュを記録（必要なら残す）
 set "HASH_FILE=%BOOT%config_hash.txt"
 if exist "%BOOT%config.json" (
     set "NEWHASH="
@@ -80,12 +73,8 @@ if exist "%BOOT%config.json" (
     )
 )
 
-REM 常に -d を付与して起動する
 set "DEPLOY_FLAG=-d"
 
-REM batファイルを経由せず「cmd /c」で起動する。
-REM (batファイル実行中に Ctrl+C を押すと出る「Terminate batch job (Y/N)?」を避けるため)
-REM 正常終了したらウィンドウは自動で閉じ、エラー終了のときだけ内容を確認できるよう一時停止する
 set CMDLINE="%ENGINE%\venv\Scripts\python.exe" "%GEN%" %DEPLOY_FLAG% %*
 start "Krea" /D "%GENDIR%" cmd /c "%CMDLINE% || pause"
 exit /b 0

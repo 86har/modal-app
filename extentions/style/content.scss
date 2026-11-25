@@ -13,15 +13,6 @@ html .my-group-popover {
   filter: invert(1) hue-rotate(180deg) !important;
 }
 
-
-// =====================================================================
-// レスポンシブ方針
-//  1) 画面幅(viewport)ではなく「カード自身の幅」で切り替える（コンテナクエリ）。
-//     DeepL側のレイアウト（サイドバーの開閉・ウィンドウ幅）でカード幅は変わるため。
-//  2) 固定幅(px)をやめ、flex / grid / clamp() で連続的に伸縮させる。
-//  3) タッチ操作(pointer: coarse)ではタップ領域を大きくし、hover はマウス時のみ。
-// =====================================================================
-
 .my-injected-element {
     --card-bg: #ffffff;
     --card-border: #e5e5e5;
@@ -39,7 +30,7 @@ html .my-group-popover {
     --label: #334155;
     --slider-accent: #2968b1;
     --slider-track: #e1f0fe;
-    // GPUドロップダウン
+
     --dd-bg: #ffffff;
     --dd-border: #dcdcdc;
     --dd-trigger-bg: #f1f1f1;
@@ -50,12 +41,11 @@ html .my-group-popover {
     --dd-muted: #707070;
     --dd-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 
-    // コントロールの高さ。スライダー高さとの差から縦位置の補正量を自動計算する
-    --ctl-h: 32px; // セレクト・入れ替えボタンの高さ
-    --slider-h: 24px; // スライダー全体の高さ
+    --ctl-h: 32px;
+    --slider-h: 24px;
     --thumb-size: 16px;
-    --gen-h: 48px; // 生成・停止ボタンの高さ
-    --field-h: 40px; // GPU選択ドロップダウン（トリガー・各行）の高さ
+    --gen-h: 48px;
+    --field-h: 40px;
 
     color-scheme: light;
     font-family: inherit;
@@ -63,15 +53,13 @@ html .my-group-popover {
     line-height: inherit;
     color: inherit;
 
-    // カード自身の幅を基準にコンテナクエリを使う
-    // （inline-size containment は固有幅を 0 にするため、width: 100% を必ず付ける）
     container: gen / inline-size;
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
 
     padding: 20px clamp(16px, 3vw, 30px);
-    margin: 8px 0 96px; // 下に余白を取る（ページの一番下で、パネルがウィンドウの端やタスクバーに隠れないように）
+    margin: 8px 0 96px;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: 15px;
@@ -84,10 +72,9 @@ html .my-group-popover {
     }
 }
 
-// ドロップダウンを開いている間だけ、カード全体を前面に出す。
-// （カードは独立した重なり順の単位になるため、そのままだと後ろに並ぶDeepLのフッター側の要素が上に描かれる）
 .my-injected-element:has(.dd.is-open),
-.my-injected-element:has(.adv-wrap.is-open) {
+.my-injected-element:has(.adv-wrap.is-open),
+.my-injected-element:has(.lora-wrap.is-open) {
     position: relative;
     z-index: 2147483000;
 }
@@ -121,8 +108,6 @@ html .my-group-popover {
     color-scheme: dark;
 }
 
-
-// タッチ端末：タップしやすい大きさにする
 @media (pointer: coarse) {
     .my-injected-element {
         --ctl-h: 44px;
@@ -132,20 +117,15 @@ html .my-group-popover {
     }
 }
 
-// ----- 状態表示（「翻訳画面に入力してください」など） -----
-// 同じ内容の <p> が2つある。widthやheightの行の右(.status-top)と、GPU選択行の下(.status-bottom)。
-// 広いときは top、積み重ねレイアウトのときは bottom を表示する。
 .generate-status {
     --state-color: var(--divider);
     margin: 0;
-    padding: 6px 10px; // 上下のパディング（縦棒の長さにもなる）
+    padding: 6px 10px;
     line-height: 1.5;
-    font-size: 22px; // カード幅が 1400px より広いとき（1400px以下は積み重ねレイアウト側で 16px にする）
+    font-size: 22px;
     color: var(--muted);
-    transition: border-color 0.25s ease; // 色がじんわり変わる
+    transition: border-color 0.25s ease;
 
-    // 文言本体：最大2行。3行以上になるぶんは「…」で省略する
-    // （パディングのある <p> 自身ではなく、中の span で切る。<p> で切ると3行目が余白に覗くため）
     .status-text {
         display: -webkit-box;
         -webkit-box-orient: vertical;
@@ -155,12 +135,10 @@ html .my-group-popover {
         overflow-wrap: anywhere;
     }
 
-    // 「生成できます」の状態では棒もテキストも表示しない
     &[data-state="ready"] {
         display: none;
     }
 
-    // 状態ごとのボーダー色（idle はグレーのまま）
     &[data-state="queued"] {
         --state-color: #3fc720;
     }
@@ -179,8 +157,6 @@ html .my-group-popover {
     }
 }
 
-// 見出し(h3)とスライダー行をひとまとめにした領域。
-// 案内文(.status-top)はこの領域の右端に重ねて置き、領域全体（見出し〜スライダー行）の縦中央に合わせる。
 .top-section {
     position: relative;
 
@@ -193,7 +169,7 @@ html .my-group-popover {
         border-right: 4px solid var(--state-color);
 
         .status-text {
-            max-width: 16em; // 案内文の幅（22px の文字で 16 文字ぶん＝約352px）
+            max-width: 16em;
         }
     }
 }
@@ -201,22 +177,18 @@ html .my-group-popover {
 .meta-container {
     min-width: 0;
 
-    // 右端に重ねる案内文（最大約376px）とスライダーがぶつからないよう、右側に余白を空けておく
     .meta-data-container {
         padding-right: 380px;
     }
 }
 
-// ----- スライダー群 -----
-// 詳細設定ポップアップ(.adv-pop)は画像選択ボタンの横に移動したので、スライダーの見た目はそちらにも効かせる
 .meta-data-container,
 .adv-pop {
     display: flex;
-    flex-wrap: wrap; // 幅が足りないときは折り返す
+    flex-wrap: wrap;
     justify-content: flex-start;
     gap: 12px;
 
-    // width と height を入れ替えるボタン
     .swap-button {
         align-self: flex-start;
         flex: 0 0 auto;
@@ -225,7 +197,7 @@ html .my-group-popover {
         justify-content: center;
         width: var(--ctl-h);
         height: var(--ctl-h);
-        margin-top: calc((var(--slider-h) - var(--ctl-h)) / 2); // スライダーの縦中央に合わせる
+        margin-top: calc((var(--slider-h) - var(--ctl-h)) / 2);
         padding: 0;
         border: none;
         border-radius: 8px;
@@ -249,29 +221,27 @@ html .my-group-popover {
             border: black 1px solid;
         }
 
-        // スライダー（上にスライダー、下の行にラベルと現在値）
         &[data-slider] {
-            // 固定 240px をやめ、240px を基準に 160〜320px の範囲で伸縮する
+
             flex: 1 1 240px;
             min-width: 160px;
             max-width: 320px;
             align-items: stretch;
 
             .slider-range {
-                --track-height: 4px; // ★後ろのバー（トラック）の高さ。ここを変更
-                --fill: 50%; // 塗りの長さ（JSが更新する）
+                --track-height: 4px;
+                --fill: 50%;
 
                 -webkit-appearance: none;
                 appearance: none;
                 width: 100%;
-                height: var(--slider-h); // スライダー全体の高さ（ツマミ・トラックより大きくしておく）
+                height: var(--slider-h);
                 margin: 0;
                 padding: 0;
-                border: none; // 上の input の枠線をスライダーには付けない
+                border: none;
                 background: transparent;
                 cursor: pointer;
 
-                // --- Chrome / Edge / Safari ---
                 &::-webkit-slider-runnable-track {
                     height: var(--track-height);
                     border-radius: 999px;
@@ -285,15 +255,14 @@ html .my-group-popover {
                     appearance: none;
                     width: var(--thumb-size);
                     height: var(--thumb-size);
-                    // トラックの縦中央にツマミを合わせる（トラックの高さを変えても自動で追従）
+
                     margin-top: calc((var(--track-height) - var(--thumb-size)) / 2);
-                    border: none; // 白い枠なし
+                    border: none;
                     border-radius: 50%;
-                    background: var(--slider-accent); // つぶつぶなし
+                    background: var(--slider-accent);
                     box-shadow: none;
                 }
 
-                // --- Firefox ---
                 &::-moz-range-track {
                     height: var(--track-height);
                     border-radius: 999px;
@@ -316,7 +285,6 @@ html .my-group-popover {
                 }
             }
 
-            // ラベル（左）と現在値（右）
             .slider-label-row {
                 display: flex;
                 justify-content: space-between;
@@ -336,7 +304,6 @@ html .my-group-popover {
             }
         }
 
-        // 生成枚数：左に縦線。幅は小さめで固定気味
         &[data-slider].nums-of-gen {
             flex: 0 1 150px;
             min-width: 120px;
@@ -347,7 +314,6 @@ html .my-group-popover {
     }
 }
 
-// ----- ドロップダウン共通（DeepLの言語選択風：黒基調）。GPU選択・アスペクト比選択で使う -----
 .dd {
     position: relative;
     flex: 0 1 auto;
@@ -402,7 +368,7 @@ html .my-group-popover {
     }
 
     &.is-open .dd-chevron {
-        transform: rotate(180deg); // 開いているときは ⌃
+        transform: rotate(180deg);
     }
 
     .dd-menu {
@@ -429,13 +395,11 @@ html .my-group-popover {
         }
     }
 
-    // 下に収まらないときは上向きに開く（JSが .is-up を付ける）
     &.is-up .dd-menu {
         top: auto;
         bottom: calc(100% + 8px);
     }
 
-    // GPU選択：見出し行と各行は同じ4列グリッド（GPU名 / $/秒 / $/時間 / $30で稼働）
     .gpu-head,
     &.gpu-select .dd-option {
         display: grid;
@@ -445,7 +409,6 @@ html .my-group-popover {
         padding: 0 20px;
     }
 
-    // アスペクト比選択：1列（比のみ）
     &.aspect-dd .dd-option {
         display: flex;
         align-items: center;
@@ -507,11 +470,10 @@ html .my-group-popover {
     }
 }
 
-// ----- アスペクト比ドロップダウン（左: 比の一覧 / 右: その比の実際の形） -----
 .aspect-dd {
     align-self: flex-start;
     flex: 0 0 auto;
-    margin-top: calc((var(--slider-h) - var(--ctl-h)) / 2); // スライダーの縦中央に合わせる
+    margin-top: calc((var(--slider-h) - var(--ctl-h)) / 2);
 
     .dd-trigger {
         height: var(--ctl-h);
@@ -527,7 +489,6 @@ html .my-group-popover {
         min-width: 132px;
     }
 
-    // 右側：四角形を置くステージ（四角形は中央に置く）
     .aspect-preview {
         flex: 0 0 auto;
         display: grid;
@@ -536,7 +497,6 @@ html .my-group-popover {
         border-left: 1px solid var(--dd-border);
     }
 
-    // その比の実際の形。width / height を JS が変えると、ぬるっと変形する
     .aspect-rect {
         display: grid;
         place-items: center;
@@ -551,12 +511,10 @@ html .my-group-popover {
         font-size: 13px;
         font-weight: 700;
         white-space: nowrap;
-        // 幅・高さが変わるときのアニメーションは JS（ASPECT_PREVIEW）が動かす
+
     }
 }
 
-// ----- 詳細設定ボタン（画像選択ボタンの右）とポップアップ -----
-//   [GPU ▾] [🖼 画像] [⚙ 詳細設定]
 .adv-wrap {
     position: relative;
     flex: 0 0 auto;
@@ -566,7 +524,7 @@ html .my-group-popover {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        height: var(--field-h); // GPU選択・画像選択ボタンと同じ高さ
+        height: var(--field-h);
         padding: 0 14px;
         border: none;
         border-radius: 8px;
@@ -625,143 +583,11 @@ html .my-group-popover {
         right: 0;
     }
 
-    // ポップアップ内のスライダーは縦に並べる（既存の flex 基準 240px を打ち消す）
     .adv-pop .meta-data-item[data-slider] {
         flex: none;
         width: 100%;
         min-width: 0;
         max-width: none;
-    }
-
-    // ----- LoRA（version ID と重み） -----
-    //   LoRA                     [＋ 追加]
-    //   version ID        重み
-    //   [ 3409322       ] [0.8 ] [×]
-    .lora-section {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        color: var(--label);
-
-        .lora-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-
-            .lora-title {
-                font-weight: 700;
-            }
-        }
-
-        .lora-add {
-            box-sizing: border-box;
-            height: 28px;
-            padding: 0 12px;
-            border: 1px solid var(--btn-border);
-            border-radius: 10000px;
-            background: transparent;
-            color: var(--btn-text);
-            font-size: 13px;
-            white-space: nowrap;
-            cursor: pointer;
-
-            @media (hover: hover) {
-                &:hover:not(:disabled) {
-                    border-color: var(--btn-hover-border);
-                    color: var(--btn-hover-text);
-                }
-            }
-
-            &:disabled {
-                opacity: 0.4;
-                cursor: not-allowed;
-            }
-        }
-
-        .lora-list {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        // 見出しと各行は同じ列幅にそろえる
-        .lora-cols,
-        .lora-row {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) 76px var(--ctl-h);
-            gap: 6px;
-            align-items: center;
-        }
-
-        .lora-cols {
-            font-size: 12px;
-            color: var(--dd-muted);
-
-            &[hidden] {
-                display: none;
-            }
-        }
-
-        .lora-id,
-        .lora-strength {
-            box-sizing: border-box;
-            width: 100%;
-            min-width: 0;
-            height: var(--ctl-h);
-            margin: 0;
-            padding: 0 10px;
-            border: 1px solid var(--dd-border);
-            border-radius: 8px;
-            background: var(--dd-trigger-bg);
-            color: var(--dd-text);
-            font: inherit;
-            outline: none;
-
-            &::placeholder {
-                color: var(--dd-muted);
-            }
-
-            &:focus {
-                border-color: var(--slider-accent);
-            }
-        }
-
-        .lora-strength {
-            text-align: right;
-        }
-
-        .lora-remove {
-            box-sizing: border-box;
-            width: var(--ctl-h);
-            height: var(--ctl-h);
-            margin: 0;
-            padding: 0;
-            border: none;
-            border-radius: 8px;
-            background: transparent;
-            color: var(--dd-muted);
-            font-size: 18px;
-            line-height: 1;
-            cursor: pointer;
-
-            @media (hover: hover) {
-                &:hover {
-                    background: var(--dd-hover);
-                    color: var(--dd-text);
-                }
-            }
-        }
-
-        .lora-empty {
-            margin: 0;
-            font-size: 13px;
-            color: var(--dd-muted);
-
-            &[hidden] {
-                display: none;
-            }
-        }
     }
 
     .adv-reset {
@@ -785,10 +611,466 @@ html .my-group-popover {
     }
 }
 
-// ----- 参照画像の選択（GPU選択の右） -----
-//   選択前:  [GPU ▾] [🖼 画像]              [⚙ 詳細設定]
-//   選択後:  [GPU ▾] [🖼 photo.png ×]       [⚙ 詳細設定]   ← 画像名がボタンの文字になる
-//   ホバー:  [GPU ▾] [🖼 別の画像を選択 ×]  [⚙ 詳細設定]
+.lora-wrap {
+    position: relative;
+    flex: 0 0 auto;
+
+    [hidden] {
+        display: none !important;
+    }
+
+    .lora-button {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: var(--field-h);
+        padding: 0 14px;
+        border: none;
+        border-radius: 8px;
+        background: var(--dd-trigger-bg);
+        color: var(--dd-text);
+        font-size: 14px;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background 0.1s;
+
+        svg {
+            flex: 0 0 auto;
+            color: var(--dd-muted);
+        }
+
+        @media (hover: hover) {
+            &:hover {
+                background: var(--dd-trigger-hover);
+            }
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--btn-hover-border);
+            outline-offset: 2px;
+        }
+    }
+
+    &.is-open .lora-button svg {
+        color: var(--slider-accent);
+    }
+
+    .lora-badge {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 9px;
+        background: var(--slider-accent);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .lora-pop {
+        position: absolute;
+        left: 0;
+        top: calc(100% + 8px);
+        z-index: 20;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        width: 440px;
+        max-width: calc(100cqi - 8px);
+        padding: 16px;
+        background: var(--dd-bg);
+        border: 1px solid var(--dd-border);
+        border-radius: 8px;
+        box-shadow: var(--dd-shadow);
+        color: var(--dd-text);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: #555 transparent;
+    }
+
+    &.is-right .lora-pop {
+        left: auto;
+        right: 0;
+    }
+
+    &.is-up .lora-pop {
+        top: auto;
+        bottom: calc(100% + 8px);
+    }
+
+    .lora-thumb {
+        flex: 0 0 auto;
+        box-sizing: border-box;
+        width: 48px;
+        height: 48px;
+        border-radius: 6px;
+        background: var(--dd-trigger-bg);
+        object-fit: cover;
+    }
+
+    .lora-add,
+    .lora-go,
+    .lora-del {
+        box-sizing: border-box;
+        flex: 0 0 auto;
+        height: 30px;
+        padding: 0 14px;
+        border: 1px solid var(--btn-border);
+        border-radius: 10000px;
+        background: transparent;
+        color: var(--btn-text);
+        font-size: 13px;
+        white-space: nowrap;
+        cursor: pointer;
+
+        @media (hover: hover) {
+            &:hover:not(:disabled) {
+                border-color: var(--btn-hover-border);
+                color: var(--dd-text);
+            }
+        }
+
+        &:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+    }
+
+    .lora-del {
+        @media (hover: hover) {
+            &:hover:not(:disabled) {
+                border-color: #fa3838;
+            }
+        }
+    }
+
+    .lora-search {
+        display: flex;
+        gap: 8px;
+
+        .lora-url {
+            flex: 1 1 auto;
+            box-sizing: border-box;
+            min-width: 0;
+            height: var(--ctl-h);
+            margin: 0;
+            padding: 0 10px;
+            border: 1px solid var(--dd-border);
+            border-radius: 8px;
+            background: var(--dd-trigger-bg);
+            color: var(--dd-text);
+            font: inherit;
+            outline: none;
+
+            &::placeholder {
+                color: var(--dd-muted);
+            }
+
+            &:focus {
+                border-color: var(--slider-accent);
+            }
+        }
+
+        .lora-go {
+            height: var(--ctl-h);
+        }
+    }
+
+    .lora-msg {
+        margin: -4px 0 0;
+        font-size: 12.5px;
+        color: var(--dd-muted);
+
+        &[data-kind="error"] {
+            color: #fa3838;
+        }
+    }
+
+    .lora-results {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--dd-border);
+    }
+
+    .lora-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px;
+        border: 1px solid var(--dd-border);
+        border-radius: 8px;
+    }
+
+    .lora-card-info {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+
+        > * {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    .lora-card-title {
+        font-weight: 700;
+    }
+
+    .lora-card-ver {
+        color: var(--label);
+    }
+
+    .lora-card-link {
+        color: var(--slider-accent);
+        font-size: 12px;
+        text-decoration: none;
+
+        @media (hover: hover) {
+            &:hover {
+                text-decoration: underline;
+            }
+        }
+    }
+
+    .lora-lib-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+
+        .lora-lib-title {
+            font-weight: 700;
+            color: var(--label);
+        }
+
+        .lora-lib-count {
+            font-size: 12px;
+            color: var(--dd-muted);
+        }
+    }
+
+    .lora-tabs {
+        display: flex;
+        gap: 4px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--dd-border);
+    }
+
+    .lora-tab {
+        flex: 1 1 0;
+        min-width: 0;
+        margin: 0;
+        padding: 4px 8px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--dd-muted);
+        font: inherit;
+        font-size: 12px;
+        white-space: nowrap;
+        cursor: pointer;
+
+        @media (hover: hover) {
+            &:hover {
+                background: var(--dd-hover);
+            }
+        }
+
+        &[aria-selected="true"] {
+            background: var(--dd-selected);
+            color: var(--dd-text);
+            font-weight: 700;
+        }
+    }
+
+    .lora-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .lora-lib-empty {
+        margin: 0;
+        font-size: 13px;
+        color: var(--dd-muted);
+    }
+
+    .lora-group {
+        border: 1px solid var(--dd-border);
+        border-radius: 8px;
+        overflow: hidden;
+
+        &.is-on {
+            border-color: var(--slider-accent);
+        }
+    }
+
+    .lora-group-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        cursor: pointer;
+
+        @media (hover: hover) {
+            &:hover {
+                background: var(--dd-hover);
+            }
+        }
+
+        &:focus-visible {
+            outline: none;
+            background: var(--dd-hover);
+        }
+
+        .lora-enable {
+            flex: 0 0 auto;
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: var(--slider-accent);
+            cursor: pointer;
+        }
+    }
+
+    .lora-group-info {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+
+        > * {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    .lora-group-title {
+        font-weight: 700;
+    }
+
+    .lora-group-ver {
+        font-size: 12px;
+        color: var(--dd-muted);
+    }
+
+    .lora-group-weight {
+        flex: 0 0 auto;
+        font-variant-numeric: tabular-nums;
+        color: var(--dd-muted);
+    }
+
+    .lora-group.is-on .lora-group-weight {
+        color: var(--slider-accent);
+        font-weight: 700;
+    }
+
+    .lora-versions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 0 10px 8px;
+    }
+
+    .lora-chip {
+        box-sizing: border-box;
+        max-width: 100%;
+        height: 26px;
+        margin: 0;
+        padding: 0 10px;
+        border: 1px solid var(--dd-border);
+        border-radius: 10000px;
+        background: transparent;
+        color: var(--dd-text);
+        font: inherit;
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+
+        @media (hover: hover) {
+            &:hover {
+                border-color: var(--btn-hover-border);
+            }
+        }
+
+        &[aria-pressed="true"] {
+            border-color: var(--slider-accent);
+            background: var(--dd-selected);
+            font-weight: 700;
+        }
+    }
+
+    .lora-weight {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 10px;
+        padding: 8px 10px 10px;
+        border-top: 1px solid var(--dd-border);
+
+        .lora-weight-url {
+            flex: 1 1 100%;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--slider-accent);
+            font-size: 12px;
+            text-decoration: none;
+
+            @media (hover: hover) {
+                &:hover {
+                    text-decoration: underline;
+                }
+            }
+        }
+
+        .lora-range {
+            flex: 1 1 auto;
+            min-width: 0;
+            margin: 0;
+            accent-color: var(--slider-accent);
+            cursor: pointer;
+        }
+
+        .lora-num {
+            box-sizing: border-box;
+            flex: 0 0 72px;
+            width: 72px;
+            height: var(--ctl-h);
+            margin: 0;
+            padding: 0 8px;
+            border: 1px solid var(--dd-border);
+            border-radius: 8px;
+            background: var(--dd-trigger-bg);
+            color: var(--dd-text);
+            font: inherit;
+            text-align: right;
+            outline: none;
+
+            &:focus {
+                border-color: var(--slider-accent);
+            }
+        }
+    }
+}
+
 @mixin image-pick-swap-text {
     .image-pick-label {
         visibility: hidden;
@@ -800,7 +1082,7 @@ html .my-group-popover {
 }
 
 .image-pick {
-    position: relative; // 「×」をボタンの中に重ねる
+    position: relative;
     display: inline-flex;
     align-items: center;
     flex: 0 1 auto;
@@ -842,12 +1124,10 @@ html .my-group-popover {
 
         &:disabled {
             opacity: 0.6;
-            cursor: progress; // ファイル選択ダイアログを開いている間
+            cursor: progress;
         }
     }
 
-    // ボタンの文字。「画像名」と「別の画像を選択」を同じ場所に重ねて、ホバーで切り替える
-    // （どちらか長いほうの幅になるので、切り替えてもボタンの幅が変わらない）
     .image-pick-text {
         display: grid;
         min-width: 0;
@@ -859,7 +1139,7 @@ html .my-group-popover {
         grid-area: 1 / 1;
         min-width: 0;
         overflow: hidden;
-        text-overflow: ellipsis; // 長い画像名は「…」で省略
+        text-overflow: ellipsis;
         white-space: nowrap;
     }
 
@@ -871,7 +1151,6 @@ html .my-group-popover {
         visibility: hidden;
     }
 
-    // 画像を選ぶと、アイコンの色を変え、文字を画像名（太字）にする
     &.has-image {
         .image-pick-btn svg {
             color: var(--slider-accent);
@@ -881,7 +1160,6 @@ html .my-group-popover {
             font-weight: 700;
         }
 
-        // 右端の「×」の分だけ余白を空ける
         .image-pick-btn {
             padding-right: 40px;
         }
@@ -897,7 +1175,6 @@ html .my-group-popover {
         }
     }
 
-    // 選んだ画像を外す「×」（画像選択ボタンの右端の内側に重ねる）
     .image-pick-clear {
         position: absolute;
         top: 50%;
@@ -919,7 +1196,7 @@ html .my-group-popover {
         cursor: pointer;
 
         &[hidden] {
-            display: none; // display 指定が hidden 属性に勝ってしまうため
+            display: none;
         }
 
         @media (hover: hover) {
@@ -935,34 +1212,28 @@ html .my-group-popover {
     }
 }
 
-// ----- GPU選択 ＋ 生成ボタン群（同じ行に並べる） -----
-//   [GPU ▾]                                  翻訳画面に入力してください
-//                                        [停止] [1枚だけ生成] [生成]
 .action-container {
     display: flex;
-    align-items: flex-end; // 下端を生成ボタンの行に揃える
+    align-items: flex-end;
     flex-wrap: wrap;
     gap: 12px;
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid var(--divider);
 
-    // 左側のフォーム部品：生成ボタン(--gen-h)の縦中央に合わせる
     > :not(.generates) {
         margin-bottom: calc((var(--gen-h) - var(--field-h)) / 2);
     }
 
-    // GPU選択行の下に出す案内文（積み重ねレイアウトのときだけ表示。下のコンテナクエリ参照）
     .status-bottom {
         display: none;
-        margin: -8px 0; // パディング分を差し引いて、GPU選択行とボタン群の両方に近づける
+        margin: -8px 0;
 
         .status-text {
-            max-width: 28em; // 案内文の幅（16px の文字で 28 文字ぶん＝約448px）
+            max-width: 28em;
         }
     }
 
-    // ボタン群：右端に寄せる
     .generates {
         display: flex;
         flex-wrap: wrap;
@@ -976,13 +1247,13 @@ html .my-group-popover {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            flex-shrink: 0; // 縮めない
-            white-space: nowrap; // 文字を折り返さない
+            flex-shrink: 0;
+            white-space: nowrap;
             height: var(--gen-h);
             background-color: var(--btn-bg);
             border: var(--btn-border) solid 2px;
             color: var(--btn-text);
-            // 左右の余白と文字サイズを、カード幅に応じて連続的に変える
+
             padding: 0 clamp(16px, 5cqi, 50px);
             font-weight: 700;
             border-radius: 10000px;
@@ -1007,7 +1278,6 @@ html .my-group-popover {
             cursor: not-allowed;
         }
 
-        // 停止ボタン・1枚だけ生成ボタン: 生成ボタンより少し小さめにする
         #stop_btn,
         #generate_one_btn {
             padding-inline: clamp(12px, 3.2cqi, 32px);
@@ -1015,18 +1285,6 @@ html .my-group-popover {
     }
 }
 
-// =====================================================================
-// 積み重ねレイアウト
-//   ・カード幅が 1400px 以下のときに使う
-//
-//   [ アスペクト比セレクト ]
-//   [ Width ] [⇄] [ Height ]
-//   [ 生成枚数 ]              ← 上に区切り線
-//   ─────────────────────────
-//   [GPU ▾]
-//   翻訳画面に入力してください   ← 左寄せ。GPU選択行のすぐ下・ボタンのすぐ上
-//   [停止] [1枚だけ生成] [生成]  ← 左寄せ
-// =====================================================================
 @mixin stacked-layout {
     .meta-data-container {
         display: grid;
@@ -1055,17 +1313,14 @@ html .my-group-popover {
         }
     }
 
-    // スライダー行の右の案内文はやめて、GPU選択行の下の案内文を使う
     .top-section .status-top {
         display: none;
     }
 
-    // 右端の案内文がなくなるので、スライダー行の右側の余白も不要
     .meta-container .meta-data-container {
         padding-right: 0;
     }
 
-    // 案内文の文字サイズ：1400px以下は 16px
     .generate-status {
         font-size: 16px;
     }
@@ -1077,10 +1332,9 @@ html .my-group-popover {
             max-width: none;
             text-align: left;
             border-right: none;
-            border-left: 4px solid var(--state-color); // 左寄せなので縦棒も左側
+            border-left: 4px solid var(--state-color);
         }
 
-        // ボタン群は専用の行に左寄せで置く
         .generates {
             flex: 1 1 100%;
             justify-content: flex-start;
@@ -1093,12 +1347,10 @@ html .my-group-popover {
     @include stacked-layout;
 }
 
-// 〜460px：スライダーも1列に縦積み。置換フォームも縦に並べ、ボタンは全幅に伸ばす
 @container gen (max-width: 460px) {
     .meta-data-container {
         grid-template-columns: minmax(0, 1fr);
 
-        // 縦に並ぶので、入れ替えボタンは中央に置き、矢印を縦向き（⇅）にする
         .swap-button {
             justify-self: center;
             margin-top: 0;
@@ -1139,7 +1391,6 @@ html .my-group-popover {
                 margin-left: auto;
             }
 
-            // 狭いので「$/秒」の列は省く
             .gpu-head,
             .dd-option {
                 grid-template-columns: minmax(0, 1fr) 56px 84px;
@@ -1152,12 +1403,14 @@ html .my-group-popover {
         }
 
         .image-pick,
-        .adv-wrap {
+        .adv-wrap,
+        .lora-wrap {
             flex: 1 1 100%;
         }
 
         .image-pick-btn,
-        .adv-wrap .adv-button {
+        .adv-wrap .adv-button,
+        .lora-wrap .lora-button {
             width: 100%;
         }
 
@@ -1167,10 +1420,6 @@ html .my-group-popover {
     }
 }
 
-// ----- 画像をページにドラッグしてきたとき（参照画像のドロップ先） -----
-// html.my-image-dragging が付いている間（JS の setupImageDrop）、パネルの中身をすべて隠して、
-// 点線の枠＋文字だけにする。中身は display:none にせず visibility:hidden にして、パネルの高さを保つ
-// （高さが変わると、ドラッグ中にページがガタつくため）。
 .image-drop {
     display: none;
 }
@@ -1219,7 +1468,7 @@ html.my-image-dragging .my-injected-element {
 }
 
 .my-glow-overlay {
-  --glow-color: 41, 104, 177; // 既存スライダーの青に合わせています
+  --glow-color: 41, 104, 177;
   position: fixed;
   inset: 0;
   z-index: 2147483647;
@@ -1248,13 +1497,6 @@ html.my-image-dragging .my-injected-element {
   }
 }
 
-
-// =====================================================================
-// グループ（選択した文字を含む行の左側に付ける、色付きの縦線）
-//  ・#my-group-layer は body 直下の透明なレイヤー。縦線とポップアップはこの中に置く
-//  ・縦線・ポップアップはページ全体の反転フィルターを打ち消している（一番上のリスト参照）ので、
-//    ここに書いた色がそのまま見える
-// =====================================================================
 #my-group-layer {
     position: absolute;
     left: 0;
@@ -1265,8 +1507,6 @@ html.my-image-dragging .my-injected-element {
     pointer-events: none;
 }
 
-// 縦線・タグ・上下のボーダー・ホバーの色は、エディタの見えている範囲だけに表示する（clip-path は JS が指定）。
-// 上下のボーダー（.my-group-lines）：範囲の上端・下端に、グループの色の薄い線を常に引く
 .my-group-lines,
 .my-group-bars,
 .my-group-hl {
@@ -1281,16 +1521,14 @@ html.my-image-dragging .my-injected-element {
     pointer-events: none;
 }
 
-// 行の左の縦線。位置・高さ・色は JS が指定する
 .my-group-bar {
     position: absolute;
     box-sizing: border-box;
     border-radius: 999px;
-    pointer-events: auto; // ホバーでグループ名（title）を見られるようにする
-    cursor: grab; // 何もない部分をドラッグすると、その範囲の行ごと動かせる
+    pointer-events: auto;
+    cursor: grab;
     touch-action: none;
 
-    // 細い縦線でもつかみやすいように、当たり判定だけ左右に広げる
     &::before {
         content: "";
         position: absolute;
@@ -1298,9 +1536,6 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// 縦線の下端のつまみ。タグ（上端）と同じように、縦線の右端にそろえて左へ伸びる四角い突起。
-// 上下にドラッグすると、グループに含める行の下の端を動かせる（上の端は、タグをつまんで動かす）
-// 色は JS が --g-color で指定する。縦線にカーソルを乗せたとき／ドラッグ中だけ見せる
 .my-group-grip {
     position: absolute;
     right: 0;
@@ -1310,11 +1545,10 @@ html.my-image-dragging .my-injected-element {
     border-radius: 2px 0 0 2px;
     background-color: var(--g-color, #888888);
     cursor: ns-resize;
-    touch-action: none; // タッチ操作でもドラッグ中にページがスクロールしないように
+    touch-action: none;
     opacity: 0;
     transition: opacity 0.12s, filter 0.1s;
 
-    // 細いので、当たり判定だけ上下左右に広げる
     &::before {
         content: "";
         position: absolute;
@@ -1332,26 +1566,20 @@ html.my-image-dragging .my-injected-element {
     opacity: 1;
 }
 
-// 行ごと動かしている間（タグをつまんで移動中）、元の縦線・タグは半透明にする。
-// マウスに追従する「つまんでいる」見た目（.my-group-drag-ghost）のほうに注目させるため
 .my-group-bar.is-move-ghost {
     opacity: 0.35;
 }
 
-// 上のつまみは、1行だけ（.is-compact）のときにだけ使う。普通の縦線では、上の端はタグをつまんで動かす
 .my-group-grip-top {
     display: none;
     top: 0;
     bottom: auto;
 }
 
-// 1行しかないタグ：縦線が短く、タグとつまみが重なってつかめなくなるので、つまみを縦線の上下の外側に出す。
-//   ・タグをつまんで動かす … 行ごと移動（クリックなら、これまでどおり編集ポップアップ）
-//   ・上のつまみ / 下のつまみをドラッグ … 上の端 / 下の端の調整（2行以上になれば、普通の縦線の表示に戻る）
 .my-group-bar.is-compact {
-    --grip-w: 18px; // つまみの大きさ（上下とも同じ）
+    --grip-w: 18px;
     --grip-h: 5px;
-    --grip-gap: 4px; // 縦線とつまみのすき間（上下とも同じ）
+    --grip-gap: 4px;
 
     .my-group-grip {
         display: block;
@@ -1359,7 +1587,6 @@ html.my-image-dragging .my-injected-element {
         height: var(--grip-h);
         border-radius: 2px;
 
-        // 当たり判定は、上下左右とも同じ幅だけ広げる
         &::before {
             inset: -5px;
         }
@@ -1379,7 +1606,6 @@ html.my-image-dragging .my-injected-element {
         cursor: grab;
         gap: 4px;
 
-        // つかんで動かせることを示す印
         &::before {
             content: "⋮⋮";
             flex: 0 0 auto;
@@ -1390,13 +1616,10 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// 連続している同じグループのタグ（.is-run）：縦線のドラッグで、連続しているぶんがまとめて動く。
-// この要素だけ動かすためのつまみ「⋮⋮」を、タグの左端に出す（Alt+ドラッグでも単体で動かせる）。
-// 1行だけ（.is-compact）のタグは、タグ自体をつかんで動かすと単体で動くので、つまみは出さない
 .my-group-tag-grab {
     display: none;
     flex: 0 0 auto;
-    margin: -3px 3px -3px -5px; // タグの左端いっぱいに当たり判定を広げる
+    margin: -3px 3px -3px -5px;
     padding: 3px 3px 3px 5px;
     font-size: 10px;
     line-height: 1.3;
@@ -1422,7 +1645,6 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// タッチ操作ではホバーがないので常に見せて、つかみやすく大きくする
 @media (hover: none) {
     .my-group-grip {
         width: 36px;
@@ -1431,7 +1653,6 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// 1行タグのつまみも、タッチ操作では少し大きくする（上下の大きさ・すき間は同じ）
 @media (hover: none) {
     .my-group-bar.is-compact {
         --grip-w: 28px;
@@ -1440,11 +1661,10 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// グループ名の突起（縦線の一番上の左側）。クリックすると編集ポップアップが開く
 .my-group-tag {
     position: absolute;
-    right: 0; // 縦線の右端にそろえて、左へ突き出す
-    top: 0; // 他のタグと重なるときは JS が下へずらす
+    right: 0;
+    top: 0;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -1459,9 +1679,8 @@ html.my-image-dragging .my-injected-element {
     white-space: nowrap;
     user-select: none;
     cursor: pointer;
-    touch-action: none; // つまんで動かせるように
+    touch-action: none;
     transition: filter 0.1s;
-    // 背景色は JS がグループの色を指定する
 
     @media (hover: hover) {
         &:hover {
@@ -1482,8 +1701,6 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// ドラッグ中、タグと同じ見た目の小さな要素をマウスの動きに合わせて出す（「持っている」感を出すため）。
-// 連なった複数件をまとめて動かしているときは、件ごとに分けて縦に並べ、半透明にする
 .my-group-drag-ghost {
     position: absolute;
     z-index: 2147483000;
@@ -1508,7 +1725,7 @@ html.my-image-dragging .my-injected-element {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    opacity: 0.8; // つまんで浮かせている、分裂した要素であることを示す半透明
+    opacity: 0.8;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
     transform: rotate(-1.5deg);
 
@@ -1527,7 +1744,6 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// グループ追加ポップアップ
 .my-group-popover {
     --gp-bg: #000000;
     --gp-border: #2a2a2a;
@@ -1558,7 +1774,6 @@ html.my-image-dragging .my-injected-element {
     pointer-events: auto;
     animation: my-group-pop 0.12s ease-out;
 
-    // グループ名・アイテム名
     .my-group-name,
     .my-group-item {
         box-sizing: border-box;
@@ -1582,7 +1797,6 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // 「グループ名」と「アイテム名」を横に並べる
     .my-group-names {
         display: flex;
         gap: 8px;
@@ -1595,7 +1809,6 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // 8色のパレット
     .my-group-colors {
         display: grid;
         grid-template-columns: repeat(8, minmax(0, 1fr));
@@ -1621,7 +1834,6 @@ html.my-image-dragging .my-injected-element {
             }
         }
 
-        // 選択中の色は白いリングで囲む
         &[aria-checked="true"],
         &:focus-visible {
             outline: 2px solid var(--gp-text);
@@ -1629,7 +1841,6 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // 「グループを追加」ボタン（編集ポップアップの「解除」「削除」も同じ見た目）
     .my-group-add,
     .my-group-btn {
         box-sizing: border-box;
@@ -1658,7 +1869,6 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// 編集ポップアップ：[解除] [削除] を横に並べる。削除は赤で強調する
 .my-group-popover .my-group-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1670,8 +1880,6 @@ html.my-image-dragging .my-injected-element {
         padding: 0 8px;
     }
 
-    // 「グループをすべて削除」は文字が長く、横に並べると幅が足りず欠けてしまうので、
-    // 次の行に単独で、popover の横幅いっぱいに広げて置く
     .my-group-remove-all {
         flex: 1 1 100%;
         white-space: nowrap;
@@ -1688,12 +1896,11 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// グループ名の候補（入力するたびに更新。最大10件）
 .my-group-popover .my-group-suggest {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-top: -4px; // 名前の入力欄に寄せる
+    margin-top: -4px;
 
     &[hidden] {
         display: none;
@@ -1724,7 +1931,6 @@ html.my-image-dragging .my-injected-element {
             }
         }
 
-        // キーボード（↑↓）で選んでいる候補
         &.is-active,
         &:focus-visible {
             outline: none;
@@ -1754,7 +1960,6 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// タッチ端末：タップしやすい大きさにする
 @media (pointer: coarse) {
     .my-group-popover {
         width: 372px;
@@ -1771,11 +1976,6 @@ html.my-image-dragging .my-injected-element {
     }
 }
 
-// 右クリックメニュー
-//   [グループを追加]
-//   [グループを代入 ›] → グループ名の一覧 › アイテム名の一覧 › 中身（アイテム名にホバーで）
-// 3つのパネル（.my-ctx-sub / .my-ctx-items / .my-ctx-preview）は同じ見た目（.my-ctx-panel）。
-// 一覧は項目の右隣に出す。収まらないときは JS が .is-left を付けて左隣にする
 .my-ctx-menu {
     --gp-bg: #0c0c0d;
     --gp-border: #2a2c31;
@@ -1804,9 +2004,8 @@ html.my-image-dragging .my-injected-element {
         position: relative;
     }
 
-    // ---- 項目（共通） ----
     .my-ctx-item {
-        --c: var(--gp-muted); // 色は JS がグループの色にする
+        --c: var(--gp-muted);
 
         box-sizing: border-box;
         display: flex;
@@ -1867,12 +2066,10 @@ html.my-image-dragging .my-injected-element {
         background: var(--gp-border);
     }
 
-    // 一覧を開いている間は、親の項目を強調したままにする
     &.is-sub-open .my-ctx-parent {
         background: var(--gp-hover);
     }
 
-    // ---- パネル（共通） ----
     .my-ctx-panel {
         box-sizing: border-box;
         padding: 6px;
@@ -1886,7 +2083,6 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // ---- 1段目：グループ名の一覧 ----
     .my-ctx-sub {
         position: absolute;
         left: calc(100% + 6px);
@@ -1899,7 +2095,6 @@ html.my-image-dragging .my-injected-element {
         scrollbar-color: #555 transparent;
         animation: my-ctx-flyout 0.1s ease-out;
 
-        // 項目と一覧のすき間（6px）を横切っても、ホバーが途切れないようにする
         &::before {
             content: "";
             position: absolute;
@@ -1921,7 +2116,6 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // 一覧のタブ（10件ごと）
     .my-ctx-tabs {
         display: flex;
         gap: 4px;
@@ -1961,7 +2155,6 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // グループの項目：開いている間は、背景だけ強調する（左の色付きバーは出さない）
     .my-ctx-group {
         &:focus-visible,
         &.is-open {
@@ -1984,7 +2177,6 @@ html.my-image-dragging .my-injected-element {
         text-overflow: ellipsis;
     }
 
-    // 件数・行数
     .my-ctx-count {
         flex: 0 0 auto;
         padding: 1px 7px;
@@ -1994,7 +2186,6 @@ html.my-image-dragging .my-injected-element {
         font-size: 11px;
     }
 
-    // ---- 2段目：アイテム名の一覧（JS が位置を決める） ----
     .my-ctx-items {
         position: absolute;
         min-width: 200px;
@@ -2011,7 +2202,6 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // 一覧の見出し（どのグループの中身か）。クリックすると、名前と色を変えられる
     .my-ctx-panel-head {
         display: flex;
         align-items: center;
@@ -2037,7 +2227,6 @@ html.my-image-dragging .my-injected-element {
             background: var(--gp-hover);
         }
 
-        // 編集中：バーの下に色の選択を出すので、下の線は消す
         &.is-editing {
             margin-bottom: 0;
             border-bottom-color: transparent;
@@ -2045,7 +2234,6 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // 名前の入力欄
     .my-ctx-head-input {
         flex: 1 1 auto;
         min-width: 0;
@@ -2066,7 +2254,6 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // 色の選択（8色）
     .my-ctx-swatches {
         display: flex;
         flex-wrap: wrap;
@@ -2105,14 +2292,12 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // 「すべて追加」：ほかの項目と同じ文字サイズ・太さにそろえる（色だけ青）
     .my-ctx-all .my-ctx-name {
         color: var(--gp-accent);
         font-size: inherit;
         font-weight: inherit;
     }
 
-    // 「グループを削除」：ふだんから赤文字。1回目のクリックで赤背景・白文字にして最終確認し、2回目で実行する
     .my-ctx-delete {
         --danger: #fa3838;
 
@@ -2133,13 +2318,11 @@ html.my-image-dragging .my-injected-element {
         }
     }
 
-    // アイテム名がないものは、最初の行を薄く出す
     .my-ctx-entry.is-unnamed .my-ctx-name {
         color: var(--gp-muted);
         font-style: italic;
     }
 
-    // ---- 3段目：アイテムの中身（JS が位置を決める） ----
     .my-ctx-preview {
         position: absolute;
         min-width: 160px;
@@ -2150,7 +2333,7 @@ html.my-image-dragging .my-injected-element {
 
         .my-ctx-preview-span {
             padding: 2px 0 2px 10px;
-            border-left: 3px solid var(--gp-muted); // 色は JS がグループの色にする
+            border-left: 3px solid var(--gp-muted);
             white-space: pre-wrap;
             overflow-wrap: anywhere;
 
@@ -2203,7 +2386,6 @@ html.my-image-dragging .my-injected-element {
     from { opacity: 0; transform: translateX(4px); }
     to   { opacity: 1; transform: translateX(0); }
 }
-
 
 @keyframes my-group-pop {
     from { opacity: 0; transform: translateY(-4px); }

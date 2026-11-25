@@ -1,30 +1,23 @@
 const CONFIG = {
-  // true: DeepLがライトモードのとき、ページ全体を強制的にダーク表示にする
+
   forceDark: true,
 
-  // true: mainSectionWrapper 以外の要素（同じ親の中の兄弟）を非表示にする
   hideSiblings: true,
   mainSectionSelector: '[data-layout-id="mainSectionWrapper"]',
 
   targetSelector: '[data-layout-id="editor-layout-footer"]',
-  // mainSectionWrapper の中では、この見出しの「辞書」カードより後ろの要素を非表示にする。
-  // DeepLの表示言語が日本語以外のときは書き換える（例: "Dictionary"）。
-  // 見出しが見つからないときは targetSelector（editor-layout-footer）より後ろを隠す。
+
   dictionaryHeading: "辞書",
 
   targetSelector: '[data-layout-id="editor-layout-footer"]',
   position: "beforebegin",
   injectedId: "my-injected-element",
 
-  // 翻訳結果（出力側）のテキストを取得するセレクタ。上から順に試して、最初に文字が取れたものを使う。
-  // ※DeepL側の構造が変わったら、ここを書き換える
   translationSelectors: [
     '[data-testid="translator-target-input"]',
     "#target-dummydiv",
   ],
 
-  // 翻訳元（入力側）エディタのセレクタ。ここにフォーカスがある状態でCtrl+Enterを押すと生成を実行する。
-  // ※DeepL側の構造が変わったら、ここを書き換える
   sourceSelectors: [
     '[data-testid="translator-source-input"]',
     "#source-dummydiv",
@@ -33,18 +26,19 @@ const CONFIG = {
 
 const SLIDER = { min: 512, max: 2048, step: 16 };
 
-// 「詳細設定」ポップアップの項目。サーバーには REF_BOOST / GROUNDING_PX という名前で送る
 const ADV = {
   refBoost: { min: 0.1, max: 5, step: 0.1, def: 1 },
-  groundingPx: { min: 128, max: 2048, step: 64, def: 1024 }, // 64の倍数ごと
+  groundingPx: { min: 128, max: 2048, step: 64, def: 1024 },
 };
 
-// 「詳細設定」ポップアップの LoRA 欄。サーバーには loras: [{ version_id: "3409322", strength: 0.8 }, ...] として送る
-//   max: 同時に指定できる LoRA の数 / strength: 重み（min〜max の範囲に収める。def は追加したときの初期値）
-const LORA = { max: 8, strength: { min: -2, max: 2, step: 0.05, def: 1 } };
+const LORA = {
+  strength: { min: 0, max: 2, step: 0.05, def: 1 },
+  popMinHeight: 560,
+  libraryMax: 30,
+  pageSize: 10,
+  baseModel: /krea\s*[-_. ]?\s*2/i,
+};
 
-// 前回「生成」を実行したときの width / height / 生成枚数 を保存しておくキー
-// （prompt は保存しない。リロード後の初期値として復元するためだけに使う）
 const STORAGE_KEYS = {
   width: "lastGenWidth",
   height: "lastGenHeight",
@@ -53,11 +47,8 @@ const STORAGE_KEYS = {
   gpu: "lastGenGpu",
   refBoost: "lastGenRefBoost",
   groundingPx: "lastGenGroundingPx",
-  loras: "lastGenLoras",
 };
 
-// 選べるGPU。value がフェッチ時に GPU という名前で送られる文字列。
-// 左から: 表示名 / 1秒あたりの料金($) / 1時間あたりの料金 / $30で動かせる時間
 const GPU_OPTIONS = [
   { name: "Nvidia B300",         value: "B300",         perSec: "0.001972", perHour: "$7.10", hours: "4.2 時間" },
   { name: "Nvidia B200",         value: "B200",         perSec: "0.001736", perHour: "$6.25", hours: "4.8 時間" },
@@ -71,17 +62,14 @@ const GPU_OPTIONS = [
   { name: "Nvidia L4",           value: "L4",           perSec: "0.000222", perHour: "$0.80", hours: "37.5 時間" },
   { name: "Nvidia T4",           value: "T4",           perSec: "0.000164", perHour: "$0.59", hours: "50.8 時間" },
 ];
-const GPU_DEFAULT = "L4"; // 保存値がないときの初期選択
+const GPU_DEFAULT = "L4";
 
-// アスペクト比ドロップダウン右側の図形の設定（数値で調整できる）
 const ASPECT_PREVIEW = {
-  size: 132, // 図形の長いほうの辺の長さ(px)。短いほうは比に合わせて決まる
-  duration: 320, // 幅・高さが変わるときのアニメーションの長さ(ms)。0 で即座に変える
-  easing: "cubic-bezier(0.22, 1, 0.36, 1)", // 動き方（最初は速く、終わりにぬるっと止まる）
+  size: 132,
+  duration: 320,
+  easing: "cubic-bezier(0.22, 1, 0.36, 1)",
 };
-// ===== グループ（選択した文字を含む行の左側に、色付きの縦線を付ける） =====
-// 選べる色（8色）。パレットにも縦線にも使う。
-// ※ページ全体が反転フィルターで表示されるため、彩度の高すぎる色は少し色味がずれる。淡めの色にしてある
+
 const GROUP_COLORS = [
   { name: "赤",       value: "#f87171" },
   { name: "オレンジ", value: "#fb923c" },
@@ -93,22 +81,22 @@ const GROUP_COLORS = [
   { name: "ピンク",   value: "#f472b6" },
 ];
 const GROUP_BAR = {
-  width: 4, // 縦線の太さ(px)
-  gap: 10, // 行の左端から縦線までの距離(px)
-  step: 6, // 縦に重なる範囲があるとき、縦線を左へずらす幅(px)
+  width: 4,
+  gap: 10,
+  step: 6,
 };
 const GROUP_TAG = {
-  maxWidth: 120, // グループ名の突起の最大幅(px)。名前が長いときは「…」で省略する（全文はホバーで見られる）
+  maxWidth: 120,
 };
-const GROUP_NAME_MAX = 40; // グループ名の最大文字数
-const GROUP_ITEM_MAX = 40; // アイテム名の最大文字数
-const GROUP_SUGGEST_MAX = 10; // グループ追加ポップアップで、グループ名の入力中に出す候補の最大数
-const GROUP_KEEP_MAX = 30; // ライブラリの1グループが、解除・削除したアイテムとして覚えておく最大数
-const GROUP_TARGET_HIGHLIGHT = "my-group-target"; // ポップアップを開いている間、対象の文字を見せるためのハイライト名
-const GROUP_STORAGE_KEY = "savedGroups"; // リロード後もグループを復元するために、グループを保存しておくキー
-const GROUP_SNAP_HISTORY = 10; // 範囲ごとに覚えておく「行の文字」の履歴の数（Ctrl+Z で元に戻ったとき、どの行か探すために使う）
-const GROUP_SNAP_TEXT_MAX = 200; // 1行ぶんとして覚える文字数の上限（照合用。保存サイズを抑えるため）
-const GROUP_ORPHAN_MAX = 30; // 行が消えて「宙に浮いた」範囲を、元に戻す/再読み込みに備えて覚えておく最大数
+const GROUP_NAME_MAX = 40;
+const GROUP_ITEM_MAX = 40;
+const GROUP_SUGGEST_MAX = 10;
+const GROUP_KEEP_MAX = 30;
+const GROUP_TARGET_HIGHLIGHT = "my-group-target";
+const GROUP_STORAGE_KEY = "savedGroups";
+const GROUP_SNAP_HISTORY = 10;
+const GROUP_SNAP_TEXT_MAX = 200;
+const GROUP_ORPHAN_MAX = 30;
 
 const HTML = `
 <div class="my-injected-element">
@@ -217,6 +205,33 @@ const HTML = `
             </button>
             <button type="button" class="image-pick-clear" aria-label="選択した画像を外す" title="画像を外す" hidden>×</button>
         </div>
+        <div class="lora-wrap">
+            <button type="button" class="lora-button" aria-haspopup="dialog" aria-expanded="false">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/>
+                    <path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>
+                </svg>
+                <span>LoRA</span>
+                <span class="lora-badge" hidden></span>
+            </button>
+            <div class="lora-pop" role="dialog" aria-label="LoRA" hidden>
+                <div class="lora-search">
+                    <input type="text" class="lora-url" placeholder="CivitAI の URL を貼り付け"
+                        autocomplete="off" spellcheck="false" aria-label="CivitAI の URL">
+                    <button type="button" class="lora-go">確定</button>
+                </div>
+                <p class="lora-msg" hidden></p>
+                <div class="lora-results" hidden></div>
+                <div class="lora-lib-head">
+                    <span class="lora-lib-title">LoRA 一覧</span>
+                    <span class="lora-lib-count"></span>
+                </div>
+                <div class="lora-tabs" role="tablist" hidden></div>
+                <div class="lora-groups"></div>
+                <p class="lora-lib-empty">追加した LoRA はここに表示されます</p>
+            </div>
+        </div>
         <div class="adv-wrap">
             <button type="button" class="adv-button" aria-haspopup="dialog" aria-expanded="false">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
@@ -245,18 +260,6 @@ const HTML = `
                         <span class="slider-value"></span>
                     </div>
                 </div>
-                <div class="lora-section">
-                    <div class="lora-head">
-                        <span class="lora-title">LoRA</span>
-                        <button type="button" class="lora-add">＋ 追加</button>
-                    </div>
-                    <div class="lora-cols" hidden>
-                        <span>version ID</span>
-                        <span>重み</span>
-                    </div>
-                    <div class="lora-list"></div>
-                    <p class="lora-empty">LoRA は使いません</p>
-                </div>
                 <button type="button" class="adv-reset">初期値に戻す</button>
             </div>
         </div>
@@ -271,9 +274,6 @@ const HTML = `
 </div>
 `;
 
-// ローカルPythonサーバーへリクエストを送る（background.js経由）
-// 例: const res = await callApi("/api/echo", { text: "hello" });
-// 拡張機能の再読み込み直後などで通信できない場合は { ok: false, extensionError } が返る
 function callApi(path, body, method = "POST") {
   return new Promise((resolve) => {
     try {
@@ -290,7 +290,6 @@ function callApi(path, body, method = "POST") {
   });
 }
 
-// chrome.storage.local から値を読み込む（取得できなければ空オブジェクトを返す）
 function storageGet(keys) {
   return new Promise((resolve) => {
     try {
@@ -307,7 +306,6 @@ function storageGet(keys) {
   });
 }
 
-// chrome.storage.local へ値を書き込む（失敗しても生成処理自体は止めない）
 function storageSet(obj) {
   try {
     chrome.storage.local.set(obj);
@@ -316,35 +314,30 @@ function storageSet(obj) {
   }
 }
 
-// 前回生成時の width / height / 生成枚数 を復元し、スライダーと表示に反映する
 async function restoreSavedParams(el) {
   const saved = await storageGet(Object.values(STORAGE_KEYS));
   const [widthRange, heightRange, numsRange] = el.querySelectorAll(".slider-range");
   const apply = (range, val) => {
     if (val === undefined || val === null || range == null) return;
     range.value = val;
-    range.dispatchEvent(new Event("input")); // 表示テキストと塗り(--fill)を更新
+    range.dispatchEvent(new Event("input"));
   };
   apply(widthRange, saved[STORAGE_KEYS.width]);
   apply(heightRange, saved[STORAGE_KEYS.height]);
   apply(numsRange, saved[STORAGE_KEYS.nums]);
   apply(el.querySelector(".adv-ref-boost"), saved[STORAGE_KEYS.refBoost]);
   apply(el.querySelector(".adv-grounding-px"), saved[STORAGE_KEYS.groundingPx]);
-  el.querySelector(".adv-wrap")?.setLoras?.(saved[STORAGE_KEYS.loras]); // LoRA（version ID と重み）
 
-  // アスペクト比は最後に、changeイベントを出さずに復元する（保存済みのwidth/heightを書き換えないため）
   const aspectSelect = el.querySelector(".aspect-select");
   const savedAspect = saved[STORAGE_KEYS.aspect];
   if (aspectSelect && savedAspect !== undefined && [...aspectSelect.options].some((o) => o.value === savedAspect)) {
     aspectSelect.value = savedAspect;
-    el.querySelector(".aspect-dd")?.sync?.(); // 独自ドロップダウンの表示も合わせる
+    el.querySelector(".aspect-dd")?.sync?.();
   }
 
-  // GPU（保存値が今の選択肢にあるときだけ反映）
   el.querySelector(".gpu-select")?.setGpu?.(saved[STORAGE_KEYS.gpu]);
 }
 
-// スライダー行の右側にある状態表示。data-state は CSS 側のボーダー色に対応（noServer / error はどちらも赤）
 const STATUS = {
   idle: { text: "翻訳画面に入力してください" },
   ready: { text: "" },
@@ -355,17 +348,14 @@ const STATUS = {
   error: { text: "予期せぬエラーが発生しました" },
 };
 
-// detail を渡すと「基本メッセージ（詳細）」の形で表示する。全文はマウスホバー(title)でも見られる
 const DETAIL_MAX = 120;
 function setStatus(el, key, detail = "") {
-  // 状態表示は2か所（スライダー行の右 / GPU選択行の下）にあり、レイアウトに応じてCSSでどちらかを表示する。
-  // 状態(data-state)は <p> が、文言は中の .status-text が持つ。両方を同じ内容に更新する
-  // （.status-text は CSS で最大2行に収め、はみ出す分は「…」で省略する。全文は title で見られる）
+
   const labels = el.querySelectorAll(".generate-status");
   const box = labels[0];
   const short = detail.length > DETAIL_MAX ? detail.slice(0, DETAIL_MAX) + "…" : detail;
   const text = STATUS[key].text + (short ? `（${short}）` : "");
-  if (box.dataset.state === key && box.querySelector(".status-text").textContent === text) return; // 変化がなければDOMに触らない
+  if (box.dataset.state === key && box.querySelector(".status-text").textContent === text) return;
   labels.forEach((label) => {
     label.dataset.state = key;
     label.querySelector(".status-text").textContent = text;
@@ -373,7 +363,6 @@ function setStatus(el, key, detail = "") {
   });
 }
 
-// サーバーの応答からエラー内容の文字列を取り出す（FastAPI形式の detail、error、message、生の本文に対応）
 function extractServerMessage(res) {
   const d = res?.data;
   if (d && typeof d === "object") {
@@ -390,14 +379,12 @@ function extractServerMessage(res) {
   return (res?.text || "").replace(/\s+/g, " ").trim();
 }
 
-// 「HTTP 422 Unprocessable Entity: サーバーのメッセージ」の形にする
 function describeHttpError(res) {
   const head = `HTTP ${res?.status ?? "?"}${res?.statusText ? " " + res.statusText : ""}`;
   const msg = extractServerMessage(res);
   return msg ? `${head}: ${msg}` : head;
 }
 
-// 翻訳結果の有無でボタンの有効/無効を切り替える
 function updateGenerateState() {
   const el = document.getElementById(CONFIG.injectedId);
   if (!el) return;
@@ -407,20 +394,17 @@ function updateGenerateState() {
   const oneBtn = el.querySelector("#generate_one_btn");
   if (oneBtn && oneBtn.disabled === hasText) oneBtn.disabled = !hasText;
 
-  // 待機中の表示だけは入力の有無に追従させる（結果表示は上書きしない）
   const state = el.querySelector(".generate-status").dataset.state;
   if (state === "idle" || state === "ready") {
     setStatus(el, hasText ? "ready" : "idle");
   }
 }
 
-// スライダーの塗り部分の長さをCSS変数に反映する
 function updateFill(range) {
   const pct = ((range.value - range.min) / (range.max - range.min)) * 100;
   range.style.setProperty("--fill", `${pct}%`);
 }
 
-// スライダーと現在値の表示を連動させる
 function setupSlider(item) {
   const range = item.querySelector(".slider-range");
   const value = item.querySelector(".slider-value");
@@ -435,7 +419,6 @@ function setupSlider(item) {
   range.addEventListener("input", sync);
 }
 
-// 現在の翻訳結果を取得する。取れなければ空文字
 function getTranslatedText() {
   for (const selector of CONFIG.translationSelectors) {
     const node = document.querySelector(selector);
@@ -445,7 +428,6 @@ function getTranslatedText() {
   return "";
 }
 
-// 翻訳元（入力側）のテキストを取得する。取れなければ空文字
 function getSourceText() {
   for (const selector of CONFIG.sourceSelectors) {
     const node = document.querySelector(selector);
@@ -455,7 +437,6 @@ function getSourceText() {
   return "";
 }
 
-// 画面の端をふわっと光らせる。kind: "press"(青) / "error"(赤)
 function flashGlow(kind = "press") {
   let glow = document.getElementById("my-glow-overlay");
   if (!glow) {
@@ -467,13 +448,10 @@ function flashGlow(kind = "press") {
   }
   glow.dataset.kind = kind;
   glow.classList.remove("is-active");
-  void glow.offsetWidth; // 連打してもアニメーションを最初からやり直す
+  void glow.offsetWidth;
   glow.classList.add("is-active");
 }
 
-// ===== ダークモード対応 =====
-// DeepLにはダークモードがないので、ページ全体の色を反転して擬似的にダークにする。
-// CSSファイルの読み込み状況に左右されないよう、ルールはここから <style> として直接注入する。
 const FORCE_DARK_CSS = `
 html.my-force-dark {
   background-color: #ffffff !important;
@@ -502,7 +480,6 @@ function ensureForceDarkStyle() {
   (document.head || document.documentElement).appendChild(style);
 }
 
-// mainSectionWrapper の兄弟要素（前後どちらも）を隠す
 function ensureHideSiblingsStyle() {
   const id = "my-hide-siblings-style";
   const existing = document.getElementById(id);
@@ -516,7 +493,7 @@ function ensureHideSiblingsStyle() {
   const s = CONFIG.mainSectionSelector;
   const style = document.createElement("style");
   style.id = id;
-  // 後ろの兄弟: s ~ *  /  前の兄弟: :has(~ s)
+
   style.textContent = `
 ${s} ~ *,
 :has(~ ${s}) {
@@ -525,17 +502,12 @@ ${s} ~ *,
   (document.head || document.documentElement).appendChild(style);
 }
 
-// ページがスクロールできないとき（パネルより下に行けないとき）の対策。
-// DeepL側の入れ物（html / body / 親要素）が overflow: hidden で内容を切っていると、下に余白を付けてもスクロールできない。
-// パネルを囲む要素のうち、中身が収まらずに切られているものだけを、縦にスクロールできるようにする。
 function ensureScrollable() {
   const mine = document.getElementById(CONFIG.injectedId);
   if (!mine) return;
   const clips = (v) => v === "hidden" || v === "clip";
   const scrolls = (v) => v === "auto" || v === "scroll";
 
-  // 1) 以前に付けた overflow-y が、もう不要（中身が収まっている）なら元に戻す。
-  //    付けっぱなしだと、入れ子のスクロール領域ができてホイールが固まる原因になる
   for (const n of document.querySelectorAll("[data-my-scroll]")) {
     if (n.scrollHeight <= n.clientHeight + 1) {
       n.style.removeProperty("overflow-y");
@@ -544,24 +516,19 @@ function ensureScrollable() {
     }
   }
 
-  // 2) パネルから外側へたどり、最初に見つかった「切っている祖先」1つだけをスクロール可能にする。
-  //    すでにスクロールできる祖先（auto / scroll）が先にあれば、何も触らない
   for (let n = mine.parentElement; n; n = n.parentElement) {
-    if (n.dataset.myScroll) return; // すでに対応済み
+    if (n.dataset.myScroll) return;
     const oy = getComputedStyle(n).overflowY;
-    if (scrolls(oy)) return; // 先にスクロール領域がある（DeepL本来のもの）
+    if (scrolls(oy)) return;
     if (!clips(oy)) continue;
-    if (n.scrollHeight <= n.clientHeight + 1) continue; // 切られている中身がなければ触らない
+    if (n.scrollHeight <= n.clientHeight + 1) continue;
     n.dataset.myScroll = "1";
     n.style.setProperty("overflow-y", "auto", "important");
     if (GROUP_DEBUG) console.log("[scroll] 縦スクロールを有効にしました:", n);
-    return; // 1つだけ
+    return;
   }
 }
 
-// body の overflow:hidden（DeepL側のスクロールロックなど）は、html が overflow:visible のとき画面全体に引き継がれて、
-// ホイール・タッチでのスクロールを止める（scrollTo だけは動く）。
-// そこで html 側にスクロールを持たせ、body の指定は打ち消す。ロック用の属性付き指定（body[data-scroll-locked] など）にも勝つ
 function ensureViewportScrollStyle() {
   const id = "my-viewport-scroll";
   if (document.getElementById(id)) return;
@@ -583,7 +550,6 @@ function applyTheme() {
   ensureHideSiblingsStyle();
   ensureViewportScrollStyle();
 
-  // forceDark が false のときだけ、CSS側の反転を打ち消す
   let off = document.getElementById("my-force-dark-off");
   if (!CONFIG.forceDark) {
     if (!off) {
@@ -600,8 +566,6 @@ function applyTheme() {
   if (el && el.dataset.theme !== "dark") el.dataset.theme = "dark";
 }
 
-// ===== mainSectionWrapper 以外・辞書より後ろを消す =====
-// 辞書の見出しから「辞書のカード全体」を割り出す（mainSectionWrapper の中だけを探す）
 function findDictionaryCard(main) {
   const heading = [...main.querySelectorAll("h1,h2,h3,h4,h5,h6,div,span,p")].find(
     (n) => n.children.length === 0 && n.textContent.trim() === CONFIG.dictionaryHeading
@@ -611,7 +575,7 @@ function findDictionaryCard(main) {
   let card = heading;
   while (card.parentElement && card.parentElement !== main) {
     const parent = card.parentElement;
-    if (parent.querySelector(CONFIG.sourceSelectors.join(","))) break; // 翻訳欄まで含んだら行き過ぎ
+    if (parent.querySelector(CONFIG.sourceSelectors.join(","))) break;
     if (parent.getBoundingClientRect().height > 300) break;
     card = parent;
   }
@@ -622,22 +586,19 @@ function hideEl(el) {
   if (el.tagName === "SCRIPT" || el.tagName === "STYLE") return;
   if (el.classList.contains("my-hidden-below")) return;
   const mine = document.getElementById(CONFIG.injectedId);
-  if (mine && el.contains(mine)) return; // 差し込んだパネルを含む要素は隠さない
+  if (mine && el.contains(mine)) return;
   el.classList.add("my-hidden-below");
 }
 
-// 要素は削除せず display:none にする（DeepLの再描画と衝突しないため）
 function hideOutsideMainSection() {
   if (!CONFIG.hideOutsideMainSection) return;
   const main = document.querySelector(CONFIG.mainSectionSelector);
   if (!main || !main.parentElement) return;
 
-  // 1) mainSectionWrapper の兄弟をすべて隠す
   for (const sib of main.parentElement.children) {
     if (sib !== main) hideEl(sib);
   }
 
-  // 2) mainSectionWrapper の中では、辞書（なければ editor-layout-footer）より後ろを隠す
   const anchor = findDictionaryCard(main) || main.querySelector(CONFIG.targetSelector);
   if (!anchor) return;
   for (let node = anchor; node && node !== main; node = node.parentElement) {
@@ -647,8 +608,6 @@ function hideOutsideMainSection() {
   }
 }
 
-// ===== 文字の置換（翻訳前の文章を書き換える） =====
-// 翻訳元エディタ（contenteditable）の要素を取得する。見つからなければ null
 function getSourceEditor() {
   for (const selector of CONFIG.sourceSelectors) {
     const node = document.querySelector(selector);
@@ -660,7 +619,6 @@ function getSourceEditor() {
   return null;
 }
 
-// エディタ内のテキストノードから、from に一致する位置をすべて集める（大文字小文字は区別する）
 function findMatches(editor, from) {
   const matches = [];
   const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
@@ -677,9 +635,6 @@ function findMatches(editor, from) {
 
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
-// ===== ドロップダウン共通（GPU選択・アスペクト比選択） =====
-// root の中の .dd-trigger / .dd-menu / .dd-list（中に .dd-option）を、開閉・キーボード操作できるようにする。
-//   onPick(value): 項目が選ばれたとき / onOpen(): メニューを開いた直後 / onClose(): 閉じた直後
 function setupDropdown(root, { onPick, onOpen, onClose } = {}) {
   const trigger = root.querySelector(".dd-trigger");
   const menu = root.querySelector(".dd-menu");
@@ -712,7 +667,6 @@ function setupDropdown(root, { onPick, onOpen, onClose } = {}) {
     menu.style.maxHeight = "";
     onOpen?.();
 
-    // 下に収まらず、上のほうが広いときは上向きに開く。どちらにも収まらないときは広いほうに合わせてスクロールさせる
     const r = trigger.getBoundingClientRect();
     const below = window.innerHeight - r.bottom - 16;
     const above = r.top - 16;
@@ -750,14 +704,13 @@ function setupDropdown(root, { onPick, onOpen, onClose } = {}) {
                       Escape: () => close(true) }[e.key];
     if (handled) {
       e.preventDefault();
-      e.stopPropagation(); // DeepL側のショートカットに渡さない
+      e.stopPropagation();
       handled();
     } else if (e.key === "Tab") {
       close();
     }
   });
 
-  // メニューの外を押したら閉じる（要素が作り直されて消えたら、自分のリスナーも外す）
   const onOutside = (e) => {
     if (!root.isConnected) {
       document.removeEventListener("pointerdown", onOutside, true);
@@ -770,8 +723,6 @@ function setupDropdown(root, { onPick, onOpen, onClose } = {}) {
   return { open, close, isOpen };
 }
 
-// ===== GPU選択ドロップダウン =====
-// 選択中のGPU名（フェッチで GPU として送る値。例: "L4" / "RTX-PRO-6000"）
 function getSelectedGpu(el) {
   return el.querySelector(".gpu-select")?.dataset.value || GPU_DEFAULT;
 }
@@ -793,7 +744,6 @@ function setupGpuSelect(el) {
   ).join("");
   const options = [...list.querySelectorAll(".dd-option")];
 
-  // 値を選ぶ。選択肢にない値なら何もしない（false を返す）
   const select = (value) => {
     const index = GPU_OPTIONS.findIndex((o) => o.value === value);
     if (index < 0) return false;
@@ -810,7 +760,6 @@ function setupGpuSelect(el) {
   setupDropdown(root, { onPick: select });
 }
 
-// ===== 詳細設定ポップアップ（画像選択ボタンの右のボタン） =====
 function setupAdvanced(el) {
   const root = el.querySelector(".adv-wrap");
   if (!root) return;
@@ -818,7 +767,6 @@ function setupAdvanced(el) {
   const pop = root.querySelector(".adv-pop");
   const ref = root.querySelector(".adv-ref-boost");
   const ground = root.querySelector(".adv-grounding-px");
-  setupLoras(root);
 
   const isOpen = () => root.classList.contains("is-open");
   const close = (returnFocus = false) => {
@@ -833,7 +781,7 @@ function setupAdvanced(el) {
     root.classList.add("is-open");
     btn.setAttribute("aria-expanded", "true");
     pop.hidden = false;
-    // 右にはみ出すときは、ボタンの右端にそろえて左へ開く
+
     const r = pop.getBoundingClientRect();
     root.classList.toggle("is-right", r.right > window.innerWidth - 8);
   };
@@ -842,7 +790,7 @@ function setupAdvanced(el) {
   pop.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.preventDefault();
-      e.stopPropagation(); // DeepL側のショートカットに渡さない
+      e.stopPropagation();
       close(true);
     }
   });
@@ -852,7 +800,6 @@ function setupAdvanced(el) {
     ground.value = ADV.groundingPx.def;
     ref.dispatchEvent(new Event("input"));
     ground.dispatchEvent(new Event("input"));
-    root.setLoras([]); // LoRA も指定なしに戻す
   });
 
   const onOutside = (e) => {
@@ -865,117 +812,567 @@ function setupAdvanced(el) {
   document.addEventListener("pointerdown", onOutside, true);
 }
 
-// ===== LoRA（version ID と重み）。詳細設定ポップアップの中の欄 =====
-// 1行 = 1つの LoRA。[version ID] [重み] [×]。「＋ 追加」で行を増やす（最大 LORA.max 個）。
-// version ID は数字だけ。CivitAI のURL（...?modelVersionId=123 / .../api/download/models/123）を貼ると、数字だけ取り出す。
-// 空の行は送らない。生成のとき、loras: [{ version_id: "123", strength: 0.8 }, ...] としてサーバーへ送る。
-const cleanLoraId = (s) => {
-  const m = /(?:modelVersionId=|\/api\/download\/models\/)(\d+)/i.exec(String(s));
-  return (m ? m[1] : String(s)).replace(/\D/g, "").slice(0, 12);
-};
+const LORA_STORAGE_KEY = "loraLibrary";
+
+let loraLib = [];
+let loraLibLoaded = false;
+let loraLibSavedJson = "";
+let loraSaveTimer = 0;
 
 const clampLoraStrength = (v) => {
   const n = Number(v);
-  if (v === "" || !Number.isFinite(n)) return LORA.strength.def;
+  if (v === "" || v === null || v === undefined || !Number.isFinite(n)) return LORA.strength.def;
   return Number(Math.min(LORA.strength.max, Math.max(LORA.strength.min, n)).toFixed(2));
 };
 
-// 送る LoRA の一覧（version ID が入っている行だけ）
-function getLoras(el) {
-  return el.querySelector(".adv-wrap")?.getLoras?.() ?? [];
+function getLoras() {
+  return loraLib
+    .filter((g) => g.enabled)
+    .map((g) => {
+      const v = g.versions.find((x) => x.id === g.active) || g.versions[0];
+      return v ? { version_id: v.id, strength: clampLoraStrength(v.strength) } : null;
+    })
+    .filter(Boolean);
 }
 
-function setupLoras(root) {
-  const section = root.querySelector(".lora-section");
-  if (!section) return;
-  const list = section.querySelector(".lora-list");
-  const addBtn = section.querySelector(".lora-add");
-  const cols = section.querySelector(".lora-cols");
-  const empty = section.querySelector(".lora-empty");
-  const { min, max, step, def } = LORA.strength;
+function sortLoraLibByUsed() {
+  loraLib = loraLib
+    .map((g, i) => ({ g, i }))
+    .sort((a, b) => (b.g.usedAt || 0) - (a.g.usedAt || 0) || a.i - b.i)
+    .map((x) => x.g);
+}
 
-  // 行の有無に合わせて、見出し・「なし」の表示・追加ボタンを切り替える
-  const paint = () => {
-    const n = list.children.length;
-    cols.hidden = n === 0;
-    empty.hidden = n !== 0;
-    addBtn.disabled = n >= LORA.max;
-  };
+function markLorasUsed() {
+  const now = Date.now();
+  let changed = false;
+  for (const g of loraLib) {
+    if (!g.enabled) continue;
+    g.usedAt = now;
+    changed = true;
+  }
+  if (changed) saveLoraLib();
+}
 
-  const addRow = (versionId = "", strength = def, focus = false) => {
-    if (list.children.length >= LORA.max) return;
-    const row = document.createElement("div");
-    row.className = "lora-row";
-    row.innerHTML = `<input type="text" class="lora-id" inputmode="numeric" placeholder="例: 3409322"
-        autocomplete="off" spellcheck="false" aria-label="version ID">
-      <input type="number" class="lora-strength" min="${min}" max="${max}" step="${step}"
-        aria-label="重み">
-      <button type="button" class="lora-remove" aria-label="このLoRAを外す" title="外す">×</button>`;
-    const idInput = row.querySelector(".lora-id");
-    const strengthInput = row.querySelector(".lora-strength");
-    idInput.value = cleanLoraId(versionId);
-    strengthInput.value = String(clampLoraStrength(strength));
+function sanitizeLoraLib(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const g of raw) {
+    if (!g || typeof g !== "object" || typeof g.title !== "string" || !Array.isArray(g.versions)) continue;
+    const modelId = String(g.modelId ?? "").replace(/\D/g, "");
+    if (!modelId) continue;
+    const versions = g.versions
+      .filter((v) => v && /^\d+$/.test(String(v.id ?? "")))
 
-    idInput.addEventListener("input", () => {
-      const v = cleanLoraId(idInput.value);
-      if (v !== idInput.value) idInput.value = v; // 変わったときだけ書き換える（カーソル位置を保つ）
-    });
-    // 重みは、入力を終えたときに範囲内へ収める（入力途中の「-」や「0.」を邪魔しない）
-    strengthInput.addEventListener("change", () => {
-      strengthInput.value = String(clampLoraStrength(strengthInput.value));
-    });
-    row.querySelector(".lora-remove").addEventListener("click", () => {
-      row.remove();
-      paint();
-    });
+      .filter((v) => !v.baseModel || LORA.baseModel.test(String(v.baseModel)))
+      .map((v) => ({
+        id: String(v.id),
+        name: String(v.name ?? "").slice(0, 80),
+        baseModel: String(v.baseModel ?? "").slice(0, 60),
+        thumb: typeof v.thumb === "string" && v.thumb.startsWith("data:image/") ? v.thumb : "",
+        strength: clampLoraStrength(v.strength),
+        addedAt: Number(v.addedAt) || 0,
+      }));
+    if (!versions.length) continue;
+    const active = versions.some((v) => v.id === String(g.active)) ? String(g.active) : versions[0].id;
+    out.push({ modelId, title: g.title.slice(0, 120), enabled: !!g.enabled, active, usedAt: Number(g.usedAt) || 0, versions });
+  }
+  return out;
+}
 
-    list.appendChild(row);
-    paint();
-    if (focus) idInput.focus({ preventScroll: true });
-  };
+function trimLoraLib() {
+  const all = [];
+  for (const g of loraLib) for (const v of g.versions) all.push(v);
+  if (all.length <= LORA.libraryMax) return;
+  all.sort((a, b) => b.addedAt - a.addedAt);
+  const drop = new Set(all.slice(LORA.libraryMax));
+  for (const g of loraLib) {
+    g.versions = g.versions.filter((v) => !drop.has(v));
+    if (g.versions.length && !g.versions.some((v) => v.id === g.active)) g.active = g.versions[0].id;
+  }
+  loraLib = loraLib.filter((g) => g.versions.length);
+}
 
-  addBtn.addEventListener("click", () => addRow("", def, true));
+function saveLoraLib() {
+  if (!loraLibLoaded) return;
+  const json = JSON.stringify(loraLib);
+  if (json === loraLibSavedJson) return;
+  loraLibSavedJson = json;
+  storageSet({ [LORA_STORAGE_KEY]: loraLib });
+}
 
-  // DeepL側のショートカットにキー入力を渡さない（Esc だけは、ポップアップを閉じるために通す）
-  section.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") e.stopPropagation();
+function saveLoraLibSoon() {
+  clearTimeout(loraSaveTimer);
+  loraSaveTimer = setTimeout(saveLoraLib, 250);
+}
+
+async function loadLoraLibrary() {
+  const stored = await storageGet([LORA_STORAGE_KEY]);
+  loraLib = sanitizeLoraLib(stored[LORA_STORAGE_KEY]);
+  trimLoraLib();
+  loraLibSavedJson = JSON.stringify(loraLib);
+  loraLibLoaded = true;
+  document.getElementById(CONFIG.injectedId)?.querySelector(".lora-wrap")?.paintLoras?.();
+}
+
+function addLoraToLib(model, ver) {
+  let g = loraLib.find((x) => x.modelId === model.modelId);
+  if (!g) {
+    g = { modelId: model.modelId, title: model.title, enabled: true, active: ver.id, usedAt: 0, versions: [] };
+  } else {
+    g.title = model.title;
+    loraLib.splice(loraLib.indexOf(g), 1);
+  }
+  loraLib.unshift(g);
+  const now = Date.now();
+  const ex = g.versions.find((x) => x.id === ver.id);
+  if (ex) {
+    ex.addedAt = now;
+    if (ver.thumb) ex.thumb = ver.thumb;
+  } else {
+    g.versions.push({ id: ver.id, name: ver.name, baseModel: ver.baseModel || "", thumb: ver.thumb || "", strength: LORA.strength.def, addedAt: now });
+  }
+  g.enabled = true;
+  g.active = ver.id;
+  g.usedAt = now;
+  trimLoraLib();
+  saveLoraLib();
+}
+
+function callCivitai(msg) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ type: "civitai", ...msg }, (res) => {
+        if (chrome.runtime.lastError) resolve({ ok: false, error: chrome.runtime.lastError.message });
+        else resolve(res || { ok: false, error: "応答がありません" });
+      });
+    } catch (err) {
+      resolve({ ok: false, error: String(err) });
+    }
   });
-  ["keyup", "keypress"].forEach((type) => section.addEventListener(type, (e) => e.stopPropagation()));
+}
 
-  root.getLoras = () =>
-    [...list.querySelectorAll(".lora-row")]
-      .map((row) => ({
-        version_id: cleanLoraId(row.querySelector(".lora-id").value),
-        strength: clampLoraStrength(row.querySelector(".lora-strength").value),
-      }))
-      .filter((x) => x.version_id);
+function parseCivitaiUrl(input) {
+  let s = String(input || "").trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  let u;
+  try {
+    u = new URL(s);
+  } catch (_) {
+    return null;
+  }
+  if (!/(^|\.)civitai\.(com|green|red)$/i.test(u.hostname)) return null;
+  const m = /\/models\/(\d+)/.exec(u.pathname);
+  const v = u.searchParams.get("modelVersionId") || (/\/api\/download\/models\/(\d+)/.exec(u.pathname) || [])[1] || "";
+  const modelId = m ? m[1] : "";
+  const versionId = /^\d+$/.test(v) ? v : "";
+  if (!modelId && !versionId) return null;
+  return { modelId, versionId };
+}
 
-  // 保存してあった内容を入れ直す（形が違うものは無視する）
-  root.setLoras = (items) => {
-    list.textContent = "";
-    if (Array.isArray(items)) {
-      for (const x of items) {
-        if (!x || typeof x !== "object") continue;
-        const id = cleanLoraId(x.version_id ?? "");
-        if (id) addRow(id, x.strength);
+const loraSiteUrl = (modelId, versionId) => `https://civitai.com/models/${modelId}?modelVersionId=${versionId}`;
+
+function setupLoraPopup(el) {
+  const root = el.querySelector(".lora-wrap");
+  if (!root) return;
+  const btn = root.querySelector(".lora-button");
+  const badge = root.querySelector(".lora-badge");
+  const pop = root.querySelector(".lora-pop");
+  const urlInput = root.querySelector(".lora-url");
+  const goBtn = root.querySelector(".lora-go");
+  const msg = root.querySelector(".lora-msg");
+  const resultsBox = root.querySelector(".lora-results");
+  const tabs = root.querySelector(".lora-tabs");
+  const groupsBox = root.querySelector(".lora-groups");
+  const empty = root.querySelector(".lora-lib-empty");
+  const countLabel = root.querySelector(".lora-lib-count");
+  const openIds = new Set();
+  let page = 0;
+  let found = null;
+
+  const setMsg = (text, kind = "") => {
+    msg.hidden = !text;
+    msg.textContent = text;
+    msg.dataset.kind = kind;
+  };
+
+  const paintBadge = () => {
+    const n = loraLib.filter((g) => g.enabled).length;
+    badge.hidden = n === 0;
+    badge.textContent = String(n);
+  };
+
+  const renderResults = () => {
+    resultsBox.textContent = "";
+    resultsBox.hidden = !found;
+    if (!found) return;
+    const f = found;
+    for (const v of f.versions) {
+      const inLib = loraLib.some((g) => g.modelId === f.modelId && g.versions.some((x) => x.id === v.id));
+      const card = document.createElement("div");
+      card.className = "lora-card";
+
+      const img = document.createElement("img");
+      img.className = "lora-thumb";
+      img.alt = "";
+      if (v.thumbData) img.src = v.thumbData;
+      else v.thumbP.then((d) => { if (d) img.src = d; });
+
+      const info = document.createElement("div");
+      info.className = "lora-card-info";
+      const title = document.createElement("div");
+      title.className = "lora-card-title";
+      title.textContent = f.title;
+      title.title = f.title;
+      const ver = document.createElement("div");
+      ver.className = "lora-card-ver";
+      ver.textContent = v.name;
+      const link = document.createElement("a");
+      link.className = "lora-card-link";
+      link.href = v.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = v.url.replace(/^https?:\/\//, "");
+      link.title = v.url;
+      info.append(title, ver, link);
+
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "lora-add";
+      add.textContent = inLib ? "追加済み" : "追加";
+      add.disabled = inLib;
+      add.addEventListener("click", async () => {
+        add.disabled = true;
+        add.textContent = "追加中…";
+        const thumb = v.thumbData || (await v.thumbP);
+        addLoraToLib({ modelId: f.modelId, title: f.title }, { id: v.id, name: v.name, thumb, baseModel: v.baseModel });
+        page = 0;
+
+        if (found === f) {
+          found = null;
+          urlInput.value = "";
+          setMsg("");
+          renderResults();
+        }
+        renderLib();
+        place();
+      });
+
+      card.append(img, info, add);
+      resultsBox.appendChild(card);
+    }
+  };
+
+  const search = async () => {
+    const parsed = parseCivitaiUrl(urlInput.value);
+    if (!parsed) {
+      setMsg("CivitAI のモデルページの URL を入力してください", "error");
+      return;
+    }
+    goBtn.disabled = true;
+    setMsg("検索中…");
+    found = null;
+    renderResults();
+    const res = await callCivitai({ op: "model", modelId: parsed.modelId, versionId: parsed.versionId });
+    goBtn.disabled = false;
+    if (!res.ok) {
+      setMsg(`取得できませんでした（${res.error || "不明なエラー"}）`, "error");
+      place();
+      return;
+    }
+    const model = res.data;
+    if (model.type && !/^(lora|locon|dora)$/i.test(model.type)) {
+      setMsg(`「${model.name}」は LoRA ではありません（${model.type}）`, "error");
+      place();
+      return;
+    }
+    const matched = (model.versions || []).filter((v) => LORA.baseModel.test(v.baseModel || ""));
+    if (!matched.length) {
+      setMsg(`「${model.name}」に Krea2 対応のバージョンはありません`, "error");
+      place();
+      return;
+    }
+    setMsg(`${model.name}：Krea2 対応 ${matched.length} 件`);
+    found = {
+      modelId: String(model.id),
+      title: model.name,
+      versions: matched.map((v) => {
+        const item = { id: String(v.id), name: v.name, baseModel: v.baseModel || "", url: loraSiteUrl(model.id, v.id), thumbData: "" };
+        item.thumbP = v.image
+          ? callCivitai({ op: "thumb", url: v.image }).then((r) => {
+              item.thumbData = r.ok && typeof r.data === "string" ? r.data : "";
+              return item.thumbData;
+            })
+          : Promise.resolve("");
+        return item;
+      }),
+    };
+    renderResults();
+    place();
+  };
+
+  goBtn.addEventListener("click", search);
+  urlInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
+      e.preventDefault();
+      search();
+    }
+  });
+
+  const buildGroup = (g) => {
+    const v = g.versions.find((x) => x.id === g.active) || g.versions[0];
+    const box = document.createElement("div");
+    box.className = "lora-group" + (g.enabled ? " is-on" : "") + (openIds.has(g.modelId) ? " is-open" : "");
+
+    const head = document.createElement("div");
+    head.className = "lora-group-head";
+    head.setAttribute("role", "button");
+    head.tabIndex = 0;
+    head.title = "クリックして重みを変更";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.className = "lora-enable";
+    cb.checked = g.enabled;
+    cb.setAttribute("aria-label", "有効にする");
+    cb.addEventListener("click", (e) => e.stopPropagation());
+
+    const img = document.createElement("img");
+    img.className = "lora-thumb";
+    img.alt = "";
+    if (v.thumb) img.src = v.thumb;
+
+    const info = document.createElement("div");
+    info.className = "lora-group-info";
+    const title = document.createElement("span");
+    title.className = "lora-group-title";
+    title.textContent = g.title;
+    title.title = g.title;
+    const verName = document.createElement("span");
+    verName.className = "lora-group-ver";
+    verName.textContent = v.name;
+    info.append(title, verName);
+
+    const weight = document.createElement("span");
+    weight.className = "lora-group-weight";
+    const paintWeight = () => {
+      weight.textContent = `×${Number(v.strength).toFixed(2)}`;
+    };
+    paintWeight();
+
+    head.append(cb, img, info, weight);
+
+    let chips = null;
+    if (g.versions.length > 1) {
+      chips = document.createElement("div");
+      chips.className = "lora-versions";
+      for (const x of g.versions) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "lora-chip";
+        chip.textContent = x.name;
+        chip.title = x.name;
+        chip.setAttribute("aria-pressed", String(x.id === g.active));
+        chip.addEventListener("click", () => {
+          g.active = x.id;
+          saveLoraLibSoon();
+          renderLib();
+        });
+        chips.appendChild(chip);
       }
     }
-    paint();
+
+    const panel = document.createElement("div");
+    panel.className = "lora-weight";
+    panel.hidden = !openIds.has(g.modelId);
+    const { min, max, step } = LORA.strength;
+    const range = document.createElement("input");
+    range.type = "range";
+    range.className = "lora-range";
+    range.min = String(min);
+    range.max = String(max);
+    range.step = String(step);
+    range.value = String(clampLoraStrength(v.strength));
+    range.setAttribute("aria-label", "重み");
+    const num = document.createElement("input");
+    num.type = "number";
+    num.className = "lora-num";
+    num.min = String(min);
+    num.max = String(max);
+    num.step = String(step);
+    num.value = String(clampLoraStrength(v.strength));
+    num.setAttribute("aria-label", "重み");
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "lora-del";
+    del.textContent = "削除";
+    del.title = "このバージョンを一覧から削除";
+
+    const siteUrl = loraSiteUrl(g.modelId, v.id);
+    const urlLink = document.createElement("a");
+    urlLink.className = "lora-weight-url";
+    urlLink.href = siteUrl;
+    urlLink.target = "_blank";
+    urlLink.rel = "noopener noreferrer";
+    urlLink.textContent = siteUrl.replace(/^https?:\/\//, "");
+    urlLink.title = siteUrl;
+    urlLink.addEventListener("click", (e) => e.stopPropagation());
+    panel.append(urlLink, range, num, del);
+
+    const setStrength = (n) => {
+      v.strength = clampLoraStrength(n);
+      paintWeight();
+      saveLoraLibSoon();
+    };
+    range.addEventListener("input", () => {
+      num.value = range.value;
+      setStrength(range.value);
+    });
+    num.addEventListener("change", () => {
+      const c = clampLoraStrength(num.value);
+      num.value = String(c);
+      range.value = String(c);
+      setStrength(c);
+    });
+    del.addEventListener("click", () => {
+      g.versions = g.versions.filter((x) => x !== v);
+      if (g.versions.length) {
+        g.active = g.versions[0].id;
+      } else {
+        loraLib = loraLib.filter((x) => x !== g);
+        openIds.delete(g.modelId);
+      }
+      saveLoraLib();
+      renderLib();
+      renderResults();
+    });
+
+    cb.addEventListener("change", () => {
+      g.enabled = cb.checked;
+      box.classList.toggle("is-on", g.enabled);
+      paintBadge();
+      saveLoraLibSoon();
+    });
+
+    const toggle = () => {
+      const open = !openIds.has(g.modelId);
+      if (open) openIds.add(g.modelId);
+      else openIds.delete(g.modelId);
+      box.classList.toggle("is-open", open);
+      panel.hidden = !open;
+    };
+    head.addEventListener("click", toggle);
+    head.addEventListener("keydown", (e) => {
+      if (e.target !== head || (e.key !== "Enter" && e.key !== " ")) return;
+      e.preventDefault();
+      toggle();
+    });
+
+    box.append(head);
+    if (chips) box.append(chips);
+    box.append(panel);
+    return box;
   };
-  paint();
+
+  const renderLib = () => {
+    const pages = Math.max(1, Math.ceil(loraLib.length / LORA.pageSize));
+    page = Math.max(0, Math.min(pages - 1, page));
+
+    tabs.textContent = "";
+    tabs.hidden = pages <= 1;
+    for (let i = 0; i < pages; i++) {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "lora-tab";
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", String(i === page));
+      const from = i * LORA.pageSize + 1;
+      tab.textContent = `${from}–${Math.min(loraLib.length, from + LORA.pageSize - 1)}`;
+      tab.addEventListener("click", () => {
+        page = i;
+        renderLib();
+      });
+      tabs.appendChild(tab);
+    }
+
+    groupsBox.textContent = "";
+    for (const g of loraLib.slice(page * LORA.pageSize, (page + 1) * LORA.pageSize)) {
+      groupsBox.appendChild(buildGroup(g));
+    }
+    empty.hidden = loraLib.length > 0;
+    const total = loraLib.reduce((n, g) => n + g.versions.length, 0);
+    countLabel.textContent = total ? `${total} / ${LORA.libraryMax}` : "";
+    paintBadge();
+  };
+  root.paintLoras = renderLib;
+  renderLib();
+
+  const isOpen = () => root.classList.contains("is-open");
+  function place() {
+    if (!isOpen()) return;
+    pop.style.maxHeight = "";
+    pop.style.minHeight = "";
+    root.classList.remove("is-up", "is-right");
+    const r = btn.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom - 16;
+    const above = r.top - 16;
+    const natural = pop.offsetHeight;
+    const up = natural > below && above > below;
+    root.classList.toggle("is-up", up);
+
+    const want = Math.max(natural, LORA.popMinHeight);
+    pop.style.minHeight = `${Math.floor(Math.min(LORA.popMinHeight, up ? above : below))}px`;
+    pop.style.maxHeight = `${Math.floor(Math.max(200, Math.min(want, up ? above : below)))}px`;
+    root.classList.toggle("is-right", pop.getBoundingClientRect().right > window.innerWidth - 8);
+  }
+  const close = (returnFocus = false) => {
+    if (!isOpen()) return;
+    markLorasUsed();
+    root.classList.remove("is-open", "is-up", "is-right");
+    btn.setAttribute("aria-expanded", "false");
+    pop.hidden = true;
+    pop.style.maxHeight = "";
+    if (returnFocus) btn.focus();
+  };
+  const open = () => {
+    if (isOpen()) return;
+    root.classList.add("is-open");
+    btn.setAttribute("aria-expanded", "true");
+    pop.hidden = false;
+    sortLoraLibByUsed();
+    saveLoraLib();
+    page = 0;
+    renderLib();
+    renderResults();
+    place();
+    urlInput.focus({ preventScroll: true });
+  };
+  btn.addEventListener("click", () => (isOpen() ? close() : open()));
+
+  pop.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close(true);
+    }
+  });
+  ["keyup", "keypress"].forEach((type) => pop.addEventListener(type, (e) => e.stopPropagation()));
+
+  const onOutside = (e) => {
+    if (!root.isConnected) {
+      document.removeEventListener("pointerdown", onOutside, true);
+      return;
+    }
+    if (isOpen() && !root.contains(e.target)) close();
+  };
+  document.addEventListener("pointerdown", onOutside, true);
 }
 
-// ===== 参照画像の選択（GPU選択の右のボタン） =====
-// ブラウザの拡張機能は、ローカルファイルの「本当のパス」を取得できない（<input type=file> は fakepath しか返さない）。
-// そこで、ローカルで動いている gen.py にOSのファイル選択ダイアログを開いてもらい、選ばれたパスを受け取る。
-// 選んだパスは「生成」「1枚だけ生成」のときに image_path として送る（gen.py 側で画像編集モードで生成する）。
-// ※ページを再読み込みすると選択は外れる（古い画像が知らないうちに使われ続けるのを防ぐため、保存はしない）
 let selectedImagePath = "";
 
 const imageBaseName = (p) => String(p).split(/[\\/]/).pop();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// callApi の失敗を状態表示に出す。失敗していたら true（呼び出し側はそこで中断する）
 function reportApiFailure(el, tag, res) {
   if (res?.networkError) {
     console.error(`[${tag}] サーバーに接続できません:`, res);
@@ -993,8 +1390,6 @@ function reportApiFailure(el, tag, res) {
   return true;
 }
 
-// gen.py にファイル選択ダイアログを開かせ、選ばれたパスを返す（キャンセル・失敗なら空文字）。
-// ダイアログを開いている間 HTTP 接続を握りっぱなしにしないよう、開始 → 結果を何度か問い合わせる、の2段階にしている
 async function pickImageFromServer(el) {
   const start = await callApi("/api/pick_image", {});
   if (reportApiFailure(el, "image", start)) return "";
@@ -1025,8 +1420,6 @@ function setupImagePick(el) {
   const label = root.querySelector(".image-pick-label");
   const clearBtn = root.querySelector(".image-pick-clear");
 
-  // 選択中の画像を表示に反映する（DeepLの再描画でパネルが作り直されても、変数に残っているので復元できる）
-  // 画像を選ぶと、ボタンの文字が画像名になる。ホバー（キーボードならフォーカス）中は「別の画像を選択」に変わる（CSS側）
   const paint = () => {
     const has = !!selectedImagePath;
     const name = has ? imageBaseName(selectedImagePath) : "";
@@ -1034,14 +1427,14 @@ function setupImagePick(el) {
     clearBtn.hidden = !has;
     label.textContent = has ? name : "画像";
     pickBtn.setAttribute("aria-label", has ? `別の画像を選択（現在: ${name}）` : "参照画像を選択");
-    // フルパスはホバーのツールチップで見られる
+
     pickBtn.title = has ? selectedImagePath : "参照画像を選ぶ（選ぶと、その画像を元にした画像編集で生成します）";
   };
   paint();
 
   pickBtn.addEventListener("click", async () => {
     if (pickBtn.disabled) return;
-    pickBtn.disabled = true; // ダイアログを開いている間は押せない
+    pickBtn.disabled = true;
     root.classList.add("is-busy");
     try {
       const path = await pickImageFromServer(el);
@@ -1061,10 +1454,6 @@ function setupImagePick(el) {
   });
 }
 
-// ===== アスペクト比ドロップダウン =====
-// 左に比の一覧、右にその比の実際の形（四角形）を出す。項目にホバー（キーボードなら選択移動）すると、
-// 四角形が今の形から新しい比へ、なめらかに変形する。「自由」は今の width:height の比で表示する。
-// 値の持ち主は非表示の <select class="aspect-select">（既存の処理はそのまま select を読み書きする）。
 function setupAspectDropdown(el) {
   const root = el.querySelector(".aspect-dd");
   const select = el.querySelector(".aspect-select");
@@ -1075,7 +1464,6 @@ function setupAspectDropdown(el) {
   const rectLabel = root.querySelector(".aspect-rect-label");
   const [widthRange, heightRange] = el.querySelectorAll(".slider-range");
 
-  // 図形のサイズをCSS変数としてSCSS側に渡す（右側の領域の幅に使う）
   root.style.setProperty("--aspect-box", `${ASPECT_PREVIEW.size}px`);
 
   list.innerHTML = [...select.options]
@@ -1083,7 +1471,6 @@ function setupAspectDropdown(el) {
     .join("");
   const options = [...list.querySelectorAll(".dd-option")];
 
-  // 選択中の値を select から読み、トリガーと一覧の表示に反映する（swap・復元など外から変えられたときにも使う）
   const sync = () => {
     const found = options.findIndex((b) => b.dataset.value === select.value);
     const index = Math.max(0, found);
@@ -1093,9 +1480,6 @@ function setupAspectDropdown(el) {
   root.sync = sync;
   sync();
 
-  // 四角形を value の比の形にする。animate=true のときは、今表示されている大きさから新しい大きさへ
-  // Web Animations API で動かす（CSSの transition や OS の「視差効果を減らす」設定に左右されない）。
-  // アニメーション中に別の比へ移っても、今の途中の大きさから滑らかにつなぐ。
   let anim = null;
   const showShape = (value, animate = true) => {
     const [w, h] = value ? value.split(":").map(Number) : [Number(widthRange?.value) || 1, Number(heightRange?.value) || 1];
@@ -1103,7 +1487,7 @@ function setupAspectDropdown(el) {
     const toW = `${(w * k).toFixed(1)}px`;
     const toH = `${(h * k).toFixed(1)}px`;
 
-    const from = rect.getBoundingClientRect(); // 動いている最中ならその途中の大きさ
+    const from = rect.getBoundingClientRect();
     anim?.cancel();
     anim = null;
     rect.style.width = toW;
@@ -1121,11 +1505,11 @@ function setupAspectDropdown(el) {
     onPick: (value) => {
       if (select.value !== value) {
         select.value = value;
-        select.dispatchEvent(new Event("change")); // setupAspect の連動（width/heightの補正）を走らせる
+        select.dispatchEvent(new Event("change"));
       }
       sync();
     },
-    onOpen: () => showShape(select.value, false), // 開いた直後は、選択中の比の形から始める
+    onOpen: () => showShape(select.value, false),
   });
 
   const preview = (e) => {
@@ -1134,11 +1518,9 @@ function setupAspectDropdown(el) {
   };
   list.addEventListener("mouseover", preview);
   list.addEventListener("focusin", preview);
-  list.addEventListener("mouseleave", () => showShape(select.value)); // 一覧から出たら、選択中の比に戻す
+  list.addEventListener("mouseleave", () => showShape(select.value));
 }
 
-// アスペクト比の連動。比率が選ばれているとき、widthかheightを動かすともう一方が自動で変わる。
-// 範囲(SLIDER.min〜max)とstepは必ず守る。範囲を超えてしまう場合は、超えない側に合わせて動かした側も補正する。
 function setupAspect(el) {
   const select = el.querySelector(".aspect-select");
   const [widthRange, heightRange] = el.querySelectorAll(".slider-range");
@@ -1146,7 +1528,7 @@ function setupAspect(el) {
 
   const clamp = (v) => Math.min(SLIDER.max, Math.max(SLIDER.min, v));
   const snap = (v) => clamp(Math.round(v / SLIDER.step) * SLIDER.step);
-  // 比率 = width / height。「自由」のときは null
+
   const getRatio = () => {
     if (!select.value) return null;
     const [w, h] = select.value.split(":").map(Number);
@@ -1154,10 +1536,10 @@ function setupAspect(el) {
   };
   const setValue = (range, v) => {
     range.value = v;
-    range.dispatchEvent(new Event("input")); // 表示テキストと塗り(--fill)を更新
+    range.dispatchEvent(new Event("input"));
   };
 
-  let applying = false; // 自分で値を変えたときにinputイベントが再度反応しないようにする
+  let applying = false;
   const apply = (source) => {
     const ratio = getRatio();
     if (!ratio) return;
@@ -1168,7 +1550,6 @@ function setupAspect(el) {
     const exact = fromWidth ? sourceVal / ratio : sourceVal * ratio;
     let targetVal = snap(exact);
 
-    // もう一方が範囲外になるときは、範囲内に収めた値から動かした側を逆算する
     if (exact > SLIDER.max || exact < SLIDER.min) {
       sourceVal = snap(fromWidth ? targetVal * ratio : targetVal / ratio);
     }
@@ -1181,19 +1562,13 @@ function setupAspect(el) {
 
   widthRange.addEventListener("input", () => { if (!applying) apply(widthRange); });
   heightRange.addEventListener("input", () => { if (!applying) apply(heightRange); });
-  // 比率を変えたときは、widthを基準にheightを合わせる
+
   select.addEventListener("change", () => apply(widthRange));
 }
 
-// ===== 選択した文字と同じ文字をマークする =====
-// DOMは書き換えず、CSS Custom Highlight API で描画だけ重ねる（DeepLのエディタと衝突しない）
 const SAME_HIGHLIGHT_NAME = "my-same-text";
-const SAME_HIGHLIGHT_MAX = 500; // 一致が多すぎるときの上限
+const SAME_HIGHLIGHT_MAX = 500;
 
-// 現状 body に invert(1) hue-rotate(180deg) がかかっているため、
-// フィルター適用後に「オレンジ背景＋黒文字」になるよう、色を逆算した値を使う。
-// （ダークにしない設定のときは、そのまま指定する）
-// マークの色（背景 / 文字）。マルチカーソルの縦棒の色にも使う
 function sameMarkColors() {
   return CONFIG.forceDark
     ? { bg: "#c04d00", fg: "#ffffff" }
@@ -1220,7 +1595,7 @@ function clearSameHighlight() {
 
 function updateSameHighlight() {
   if (!(window.CSS && CSS.highlights) || typeof Highlight === "undefined") return;
-  if (multi) return; // Ctrl+D のマルチ編集中は、マーク表示を multi 側で管理する
+  if (multi) return;
 
   const editor = getSourceEditor();
   const sel = window.getSelection();
@@ -1228,14 +1603,14 @@ function updateSameHighlight() {
     clearSameHighlight();
     return;
   }
-  // 選択が翻訳元エディタの中にあるときだけ反応する
+
   if (!editor.contains(sel.anchorNode) || !editor.contains(sel.focusNode)) {
     clearSameHighlight();
     return;
   }
 
   const text = sel.toString();
-  // 空白だけ・改行をまたぐ選択はマークしない
+
   if (!text.trim() || /[\r\n]/.test(text)) {
     clearSameHighlight();
     return;
@@ -1244,7 +1619,7 @@ function updateSameHighlight() {
   const selRange = sel.getRangeAt(0);
   const ranges = [];
   for (const m of findMatches(editor, text)) {
-    // 選択中の箇所そのものは、選択色が見えるようにマークしない
+
     if (m.node === selRange.startContainer && m.start === selRange.startOffset) continue;
     const r = new Range();
     r.setStart(m.node, m.start);
@@ -1270,28 +1645,24 @@ function setupSameHighlight() {
       updateSameHighlight();
     });
   };
-  // 選択範囲が増減するたびに発火する
+
   document.addEventListener("selectionchange", schedule);
-  // 文章を編集したら古いマークは消す（再選択で付け直される）
+
   document.addEventListener("input", clearSameHighlight, true);
 }
 
-// ===== Ctrl+D：選択した文字と同じ文字を、すべて同時に編集する（マルチカーソル） =====
-// contenteditable には複数カーソルがないので、「カーソル位置の一覧」を自前で持ち、
-// 入力・削除を一覧の全位置に同じように適用する。位置は DOM ノードではなく
-// 「エディタ内テキストの先頭からの文字数」で持つ（DeepLが再描画してもずれないように）。
 const MULTI_HIGHLIGHT_NAME = "my-multi-text";
-const MULTI_MAX = 50; // 同時に編集できる最大数（1か所ごとに描画を待つため、多いと重くなる）
+const MULTI_MAX = 50;
 const MULTI_EXIT_KEYS = [
   "Escape", "Enter", "Tab",
   "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
   "Home", "End", "PageUp", "PageDown",
 ];
 
-let multi = null; // { carets: [{s, e}], primary: 主カーソルの番号 }  s/e は文字数オフセット
-let multiBusy = Promise.resolve(); // 編集を1つずつ順番に処理するためのキュー
-let multiApplying = false; // 自分で execCommand を実行している間だけ true（自分のイベントを無視する）
-let multiComp = null; // IME変換中の状態 { len: 変換開始時のテキスト全体の文字数 }
+let multi = null;
+let multiBusy = Promise.resolve();
+let multiApplying = false;
+let multiComp = null;
 let multiRaf = 0;
 
 function enqueueMulti(fn) {
@@ -1306,7 +1677,6 @@ function editorTextNodes(editor) {
   return nodes;
 }
 
-// テキストノードが属する「行（段落）」の要素
 const BLOCK_TAGS = /^(P|DIV|LI|H[1-6]|BLOCKQUOTE|PRE)$/;
 function blockOf(editor, node) {
   for (let el = node.parentElement; el && el !== editor; el = el.parentElement) {
@@ -1315,11 +1685,6 @@ function blockOf(editor, node) {
   return editor;
 }
 
-// エディタ内のテキストを「先頭からの文字数」で扱うための地図。
-// 行（段落）が変わるところ・<br> をまたぐところには、1文字ぶんの区切り（改行）を入れて数える。
-// こうしないと「前の行の末尾」と「次の行の先頭」が同じ文字数になってしまい、
-// 行頭にカーソルを置いたとき前の行の末尾に飛んでしまう。
-// segs: [{ node, start, len }]（start はその行内テキストの開始位置）
 function editorLayout(editor) {
   const nodes = editorTextNodes(editor);
   const brs = [...editor.querySelectorAll("br")];
@@ -1336,7 +1701,7 @@ function editorLayout(editor) {
         brs.some(
           (br) => prev.compareDocumentPosition(br) & FOLLOWING && n.compareDocumentPosition(br) & PRECEDING
         );
-      if (newBlock || hasBr) pos += 1; // 行の区切り
+      if (newBlock || hasBr) pos += 1;
     }
     const len = n.nodeValue.length;
     segs.push({ node: n, start: pos, len });
@@ -1346,12 +1711,10 @@ function editorLayout(editor) {
   return { segs, total: pos };
 }
 
-// 区切りを含めた文字数の合計
 function multiTextLength(editor) {
   return editorLayout(editor).total;
 }
 
-// 区切りを "\n" にした文字列（サロゲートペアの判定用）
 function multiTextString(editor) {
   const { segs } = editorLayout(editor);
   let out = "";
@@ -1362,7 +1725,6 @@ function multiTextString(editor) {
   return out;
 }
 
-// DOM上の位置 → エディタ先頭からの文字数。エディタの外なら null
 function offsetOf(editor, node, off) {
   if (!node || !editor.contains(node)) return null;
   const { segs, total } = editorLayout(editor);
@@ -1370,7 +1732,7 @@ function offsetOf(editor, node, off) {
     const sg = segs.find((x) => x.node === node);
     return sg ? sg.start + off : null;
   }
-  // 要素の中の位置（例：<p> の先頭や末尾）
+
   const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
   const child = node.childNodes[off];
   if (child) {
@@ -1388,16 +1750,15 @@ function offsetOf(editor, node, off) {
   return after ? after.start : total;
 }
 
-// 文字数オフセット → Range（テキストが無ければ null）
 function rangeFromOffsets(editor, s, e) {
   const { segs } = editorLayout(editor);
   if (segs.length === 0) return null;
-  // preferNext: 境界ぴったりのとき、次のノード側に置く（選択範囲の先頭用）
+
   const locate = (p, preferNext) => {
     for (let i = 0; i < segs.length; i++) {
       const sg = segs[i];
       if (p < sg.start) {
-        // 行の区切りの上：先頭側なら次の行の頭、末尾側なら前の行の終わり
+
         if (preferNext || i === 0) return { node: sg.node, off: 0 };
         return { node: segs[i - 1].node, off: segs[i - 1].len };
       }
@@ -1415,7 +1776,6 @@ function rangeFromOffsets(editor, s, e) {
   return r;
 }
 
-// 同じ位置になったカーソルをまとめる（削除で隣同士がくっついたときなど）
 function normalizeCarets(carets, primary) {
   const out = [];
   let newPrimary = 0;
@@ -1431,9 +1791,6 @@ function normalizeCarets(carets, primary) {
   return { carets: out, primary: newPrimary };
 }
 
-// --- 表示（まだ選択状態のものは紫のマーク、カーソルだけになったものは紫の縦棒） ---
-// 背景は紫、文字は白。ページ全体に反転フィルターがかかっているときは、
-// 反転後に紫・白に見えるよう逆算した色を使う（純粋な紫は反転で表現できないので近い紫になる）
 function multiMarkColors() {
   return CONFIG.forceDark
     ? { bg: "#ab81ff", fg: "#000000" }
@@ -1444,7 +1801,7 @@ function ensureMultiStyle() {
   const id = "my-multi-style";
   document.getElementById(id)?.remove();
   const { bg, fg } = multiMarkColors();
-  // 主カーソルの本物の選択範囲も同じ色にする（翻訳元エディタの中だけ）
+
   const selectionSelectors = CONFIG.sourceSelectors
     .map((sel) => `${sel}::selection, ${sel} ::selection`)
     .join(",\n");
@@ -1480,7 +1837,7 @@ function refreshMultiMarks() {
   if (!editor) return;
   const ranges = [];
   multi.carets.forEach((c, i) => {
-    if (i === multi.primary || c.s === c.e) return; // 主カーソルは本物の選択が見えている
+    if (i === multi.primary || c.s === c.e) return;
     const r = rangeFromOffsets(editor, c.s, c.e);
     if (r) ranges.push(r);
   });
@@ -1492,7 +1849,6 @@ function clearMultiHighlight() {
   if (window.CSS && CSS.highlights) CSS.highlights.delete(MULTI_HIGHLIGHT_NAME);
 }
 
-// カーソル（幅0のRange）の画面上の位置。幅0だと座標が取れないことがあるので、隣の文字から補う
 function caretRect(editor, s) {
   const r = rangeFromOffsets(editor, s, s);
   if (!r) return null;
@@ -1525,7 +1881,7 @@ function renderMultiCarets() {
     layer.id = "my-multi-caret-layer";
     document.body.appendChild(layer);
   }
-  // body に filter があると position の基準が変わるので、レイヤー自身の位置を原点にして座標を出す
+
   const origin = layer.getBoundingClientRect();
   const targets = multi.carets.filter((c, i) => i !== multi.primary && c.s === c.e);
   while (layer.children.length > targets.length) layer.lastChild.remove();
@@ -1557,7 +1913,6 @@ function multiLoop() {
   multiRaf = requestAnimationFrame(multiLoop);
 }
 
-// --- 開始 / 終了 ---
 function enterMultiEdit() {
   if (multi) return;
   const editor = getSourceEditor();
@@ -1578,14 +1933,14 @@ function enterMultiEdit() {
     if (s !== null) carets.push({ s, e: s + text.length });
   }
   const primary = carets.findIndex((c) => c.s === selStart);
-  if (primary < 0 || carets.length < 2) return; // 同じ文字が他になければ何もしない
+  if (primary < 0 || carets.length < 2) return;
   if (carets.length > MULTI_MAX) {
-    flashGlow("error"); // 多すぎる
+    flashGlow("error");
     return;
   }
 
   multi = { carets, primary };
-  clearSameHighlight(); // 選択中のオレンジのマークは、紫のマークに置き換える
+  clearSameHighlight();
   ensureMultiStyle();
   refreshMultiMarks();
   if (!multiRaf) multiRaf = requestAnimationFrame(multiLoop);
@@ -1601,11 +1956,6 @@ function exitMulti() {
   clearSameHighlight();
 }
 
-// --- 編集 ---
-// kind: "insert"（data を入力）/ "backspace" / "delete"。全カーソルの位置に同じ操作を行う。
-// opts.skip: その番号のカーソルは編集しない（IME確定のときは、主カーソルは入力済みなので飛ばす）
-// opts.base: 編集前のカーソル位置の一覧（省略すると multi.carets）
-// 後ろのカーソルから順に処理し、1か所ごとにDeepL側の再描画を待つ
 async function applyMultiEdit(kind, data = "", opts = {}) {
   const editor = getSourceEditor();
   if (!multi || !editor) return;
@@ -1618,7 +1968,7 @@ async function applyMultiEdit(kind, data = "", opts = {}) {
   if (!isFocusInSourceEditor()) editor.focus();
 
   for (let i = base.length - 1; i >= 0; i--) {
-    if (!multi) return; // 途中で終了された
+    if (!multi) return;
     const c = base[i];
     if (i === skip) {
       newPos[i] = c.e;
@@ -1634,7 +1984,7 @@ async function applyMultiEdit(kind, data = "", opts = {}) {
     sel.addRange(range);
 
     const before = multiTextLength(editor);
-    multiApplying = true; // この間に出る beforeinput は自分のもの
+    multiApplying = true;
     try {
       if (kind === "insert") document.execCommand("insertText", false, data);
       else if (kind === "backspace") document.execCommand("delete");
@@ -1651,7 +2001,6 @@ async function applyMultiEdit(kind, data = "", opts = {}) {
   }
   if (!multi) return;
 
-  // 後ろから編集したので、各カーソルは「手前のカーソルの増減ぶん」だけずらして確定する
   let shift = 0;
   const next = base.map((c, i) => {
     const p = newPos[i] + shift;
@@ -1662,7 +2011,6 @@ async function applyMultiEdit(kind, data = "", opts = {}) {
   multi.carets = norm.carets;
   multi.primary = norm.primary;
 
-  // 本物の選択（キャレット）は主カーソルに戻す
   const pc = multi.carets[multi.primary];
   const pr = rangeFromOffsets(editor, pc.s, pc.e);
   if (pr) {
@@ -1673,9 +2021,6 @@ async function applyMultiEdit(kind, data = "", opts = {}) {
   refreshMultiMarks();
 }
 
-// 左右の矢印：dir = -1（左）/ 1（右）
-// 選択状態のカーソルは、左なら選択の先頭、右なら選択の末尾にカーソルを置く。
-// すでにカーソルだけのものは、1文字ぶん動かす（絵文字などのサロゲートペアは2単位まとめて動かす）
 async function moveMultiCarets(dir) {
   const editor = getSourceEditor();
   if (!multi || !editor) return;
@@ -1701,7 +2046,6 @@ async function moveMultiCarets(dir) {
   multi.carets = norm.carets;
   multi.primary = norm.primary;
 
-  // 本物のキャレットは主カーソルに置く
   const pc = multi.carets[multi.primary];
   const pr = rangeFromOffsets(editor, pc.s, pc.e);
   if (pr) {
@@ -1709,12 +2053,11 @@ async function moveMultiCarets(dir) {
     sel.removeAllRanges();
     sel.addRange(pr);
   }
-  refreshMultiMarks(); // 紫のマークは消え、紫の縦棒のカーソルだけになる
+  refreshMultiMarks();
 }
 
-// IMEの確定後：主カーソルにはもう入力されているので、他のカーソルに同じ文字を入れる
 async function syncCompositionToOthers(data, startLen) {
-  await nextFrame(); // DeepL側の反映を待ってから状態を読む
+  await nextFrame();
   const editor = getSourceEditor();
   if (!multi || !editor) return;
   const sel = window.getSelection();
@@ -1733,9 +2076,8 @@ async function syncCompositionToOthers(data, startLen) {
   await applyMultiEdit("insert", data, { skip: p, base });
 }
 
-// --- イベント ---
 function onMultiKeydown(e) {
-  // Ctrl+D（Macは Cmd+D）：ブラウザ標準のショートカット（ブックマーク登録など）は常に無効にする
+
   if (e.code === "KeyD" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -1746,7 +2088,6 @@ function onMultiKeydown(e) {
   if (!multi || e.isComposing) return;
   if (e.key === "Control" || e.key === "Meta" || e.key === "Shift" || e.key === "Alt") return;
 
-  // 左右の矢印（修飾キーなし）：全カーソルを同時に動かす。選択状態のものはカーソルに変わる
   if (
     (e.key === "ArrowLeft" || e.key === "ArrowRight") &&
     !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey
@@ -1760,7 +2101,7 @@ function onMultiKeydown(e) {
 
   const k = e.key.toLowerCase();
   const isShortcut = e.ctrlKey || e.metaKey;
-  // 移動・確定系のキーや、コピー/貼り付け以外のショートカットが押されたらマルチ編集を終わる
+
   if (MULTI_EXIT_KEYS.includes(e.key) || (isShortcut && k !== "c" && k !== "v")) {
     exitMulti();
   }
@@ -1768,7 +2109,7 @@ function onMultiKeydown(e) {
 
 function onMultiBeforeInput(e) {
   if (!multi || multiApplying || e.isComposing) return;
-  if (e.inputType === "insertCompositionText") return; // IMEは compositionend で同期する
+  if (e.inputType === "insertCompositionText") return;
   if (!isFocusInSourceEditor()) return;
 
   let kind = null;
@@ -1786,10 +2127,10 @@ function onMultiBeforeInput(e) {
   }
 
   if (!kind) {
-    exitMulti(); // 改行・単語削除・元に戻す…などは、通常どおり主カーソルだけに適用して終了
+    exitMulti();
     return;
   }
-  // DeepL側に先に処理させない（全カーソルへの適用は自分で行う）
+
   e.preventDefault();
   e.stopPropagation();
   enqueueMulti(() => applyMultiEdit(kind, data));
@@ -1823,7 +2164,6 @@ function setupMultiEdit() {
     true
   );
 
-  // クリックしたら終了（クリック自体は通常どおり処理される）
   document.addEventListener(
     "mousedown",
     () => {
@@ -1833,38 +2173,33 @@ function setupMultiEdit() {
   );
 }
 
-// ===== グループ：選択した文字をクリック → 名前と色を決めて、その行の左側に色付きの縦線を付ける =====
-// DeepLのエディタのDOMは書き換えない。縦線は body 直下の専用レイヤーに重ねて描く。
-// 縦線は「行（段落）の要素」を持ち主にして、毎フレーム位置を測り直す
-// （折り返し・スクロール・ウィンドウ幅の変化に追従する）。行が削除されて要素がDOMから消えたら、縦線も消える。
-const groups = []; // { id, name, color, spans: [{ first, last }] }  first / last: 範囲の最初・最後の行の要素
+const groups = [];
 let groupSeq = 0;
-let groupLastColor = GROUP_COLORS[5].value; // 前回選んだ色（次回のポップアップの初期値）
-let groupPopover = null; // { root, saved, onOutside }
-let groupPending = null; // mousedown 時点の { range, anchors, x, y }
+let groupLastColor = GROUP_COLORS[5].value;
+let groupPopover = null;
+let groupPending = null;
 let groupRaf = 0;
-let groupTimer = 0; // 縦線が1本も出ていないとき用の、ゆっくりした見回り
-let groupDirty = false; // true のとき、次のフレームで行との対応を取り直す・保存する
+let groupTimer = 0;
+let groupDirty = false;
 let groupSyncAt = 0;
-let groupHasOrphan = false; // 行が見つからず宙に浮いている範囲があるか
-let groupsLoaded = false; // 保存済みのグループを読み込み終えたか（終えるまでは保存しない）
-let groupSavedJson = ""; // 最後に保存した内容（変化がないときは書き込まない）
-let groupDrag = null; // 縦線の端をドラッグしている間の状態
-let groupMove = null; // 縦線の何もない部分をドラッグして、行ごと動かしている間の状態
-let groupDragGhost = null; // { root } タグと同じ見た目でマウスに追従させている要素（行ごと移動中だけ）
-let groupBootUntil = 0; // この時刻までは、グループの付け直しを短い間隔で試す（リロード直後に文字が入るのを待つ）
+let groupHasOrphan = false;
+let groupsLoaded = false;
+let groupSavedJson = "";
+let groupDrag = null;
+let groupMove = null;
+let groupDragGhost = null;
+let groupBootUntil = 0;
 let groupWarned = false;
-const GROUP_DEBUG = true; // 原因調査用ログ。確認が終わったら false にする
+const GROUP_DEBUG = true;
 let groupDebugAt = 0;
-let groupHistoryUntil = 0; // Ctrl+Z / Ctrl+Y を押した直後のこの時刻までは、縮めた範囲を元の大きさに戻せるか確かめる
-let groupSuppressClick = false; // タグをつまんで動かしたあとの「クリック」を無視するための印
-let groupAltDown = false; // Alt（Mac は Option）を押している間 true。縦線にホバーしたとき「この要素だけ」を示すために使う
+let groupHistoryUntil = 0;
+let groupSuppressClick = false;
+let groupAltDown = false;
 
-// 選択中の文字を表すハイライト（ポップアップの入力欄にフォーカスが移っても、対象の文字が見えるようにする）
 function ensureGroupStyle() {
   const id = "my-group-style";
   document.getElementById(id)?.remove();
-  // ページ全体の反転フィルターを考慮して、青背景＋白文字に見える色を逆算してある
+
   const { bg, fg } = CONFIG.forceDark
     ? { bg: "#79abff", fg: "#000000" }
     : { bg: "#2f64d0", fg: "#ffffff" };
@@ -1875,9 +2210,6 @@ function ensureGroupStyle() {
   background-color: ${bg};
   color: ${fg};
 }
-/* 縦線・ポップアップのレイヤーは popover（最上位レイヤー）で表示する。
-   最上位レイヤーはページ全体の反転フィルターを受けないので、指定した色がそのまま出る。
-   popover 既定のスタイル（中央寄せ・余白・枠・背景）は打ち消す */
 #my-group-layer[popover] {
   margin: 0 !important;
   padding: 0 !important;
@@ -1894,13 +2226,11 @@ function ensureGroupStyle() {
 #my-group-layer .my-ctx-menu {
   filter: none !important;
 }
-/* 縦線の端をドラッグしている間は、どこにいても上下矢印のカーソルにして、文字が選択されないようにする */
 html.my-group-dragging,
 html.my-group-dragging * {
   cursor: ns-resize !important;
   user-select: none !important;
 }
-/* 縦線をつかんで行ごと動かしている間 */
 html.my-group-moving,
 html.my-group-moving * {
   cursor: grabbing !important;
@@ -1909,23 +2239,22 @@ html.my-group-moving * {
   (document.head || document.documentElement).appendChild(style);
 }
 
-// 縦線とポップアップを置くレイヤー（body直下）。中に縦線用の入れ物を1つ持つ
 function ensureGroupLayer() {
   let layer = document.getElementById("my-group-layer");
   if (!layer) {
     layer = document.createElement("div");
     layer.id = "my-group-layer";
-    layer.setAttribute("popover", "manual"); // 自動では閉じない
-    const hl = document.createElement("div"); // ホバー中のグループの文字を薄くマークする（縦線より奥）
+    layer.setAttribute("popover", "manual");
+    const hl = document.createElement("div");
     hl.className = "my-group-hl";
     layer.appendChild(hl);
     const bars = document.createElement("div");
     bars.className = "my-group-bars";
-    // タグ（グループ名の突起）や縦線の端のつまみを押しても、エディタの選択やフォーカスを動かさない
+
     bars.addEventListener("mousedown", (e) => {
       if (e.target instanceof Element && e.target.closest(".my-group-bar")) e.preventDefault();
     });
-    // 縦線の端のつまみをドラッグ：含める行を増減する
+
     bars.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || !(e.target instanceof Element)) return;
       const grip = e.target.closest(".my-group-grip");
@@ -1933,8 +2262,6 @@ function ensureGroupLayer() {
       const bar = e.target.closest(".my-group-bar");
       if (!bar || !bar._g || !bar._sp) return;
 
-      // 縦線の何もない部分：少し動かしたら、行ごとの移動を始める。
-      // 同じグループのタグが連続しているときは、連続しているぶんをすべて一斉に動かす（Alt を押しながらなら、この要素だけ）
       if (!grip && !tag) {
         e.preventDefault();
         startGroupMove(bar._g, bar._sp, e, undefined, { single: e.altKey });
@@ -1946,13 +2273,13 @@ function ensureGroupLayer() {
         startGroupDrag(bar._g, bar._sp, grip.dataset.edge === "top" ? "top" : "bottom", e);
         return;
       }
-      // タグ：少し動かしたらドラッグ（上の端を動かす）。動かさずに離せば、これまでどおりクリック（編集ポップアップ）
+
       const sx = e.clientX;
       const sy = e.clientY;
       const pid = e.pointerId;
       const g = bar._g;
       const sp = bar._sp;
-      // 連なったタグの「⋮⋮」のつまみ、または Alt を押しながらのドラッグ：この要素だけを動かす
+
       const single = e.altKey || !!e.target.closest(".my-group-tag-grab");
       const cleanup = () => {
         window.removeEventListener("pointermove", move, true);
@@ -1964,7 +2291,7 @@ function ensureGroupLayer() {
         cleanup();
         groupSuppressClick = true;
         if (single || bar.classList.contains("is-compact")) {
-          startGroupMove(g, sp, ev, { sx, sy }, { single: true }); // 1行だけのタグ・単体移動：この要素だけ行ごと動かす（範囲の調整は上下のつまみで）
+          startGroupMove(g, sp, ev, { sx, sy }, { single: true });
           onGroupMoveMove(ev);
         } else {
           startGroupDrag(g, sp, "top", ev, sy);
@@ -1974,10 +2301,10 @@ function ensureGroupLayer() {
       window.addEventListener("pointerup", cleanup, true);
       window.addEventListener("pointercancel", cleanup, true);
     });
-    // タグ（グループ名の突起）をクリック：編集ポップアップを開く（もう一度押すと閉じる）
+
     bars.addEventListener("click", (e) => {
       if (groupSuppressClick) {
-        groupSuppressClick = false; // タグをつまんで動かしたあとは、ポップアップを開かない
+        groupSuppressClick = false;
         return;
       }
       if (!(e.target instanceof Element)) return;
@@ -1994,14 +2321,13 @@ function ensureGroupLayer() {
     layer.appendChild(bars);
     document.body.appendChild(layer);
   }
-  // 最上位レイヤーに出す（すでに表示中なら何もしない）
+
   try {
     if (!layer.matches(":popover-open")) layer.showPopover();
   } catch (_) {}
   return layer;
 }
 
-// テキストノードが属する「行」の要素。段落があればその段落、なければエディタ直下の子
 function groupAnchorOf(editor, node) {
   const block = blockOf(editor, node);
   if (block !== editor) return block;
@@ -2010,8 +2336,6 @@ function groupAnchorOf(editor, node) {
   return top;
 }
 
-// 選択範囲から、含まれる行の要素（anchors）と、選んだ文字の表示位置（rects）を集める
-// （選択が次の行の先頭ぴったりで終わっているときは、次の行は含めない）
 function groupSelectionInfo(editor, range) {
   const anchors = [];
   const rects = [];
@@ -2037,21 +2361,16 @@ function groupNodeRect(node) {
   return r.getBoundingClientRect();
 }
 
-// 縦線1本ぶんの要素：縦線の本体と、その一番上の左に付くタグ（グループ名。クリックで編集ポップアップ）
 function createGroupBar() {
   const d = document.createElement("div");
   d.className = "my-group-bar";
-  // タグ（上端）をつまんで動かすと上の端、下端のつまみ（四角い突起）を動かすと下の端を調整できる
-  // 1行しかないとき（.is-compact）は、タグとつまみが重なるので、つまみを縦線の上下の外側に出す。
-  // その場合、上下のつまみで範囲を、タグをつまんで行ごとの移動をする
+
   d.innerHTML = `<div class="my-group-grip my-group-grip-top" data-edge="top" title="ドラッグして範囲を調整"></div>
 <div class="my-group-grip" data-edge="bottom" title="ドラッグして範囲を調整"></div>
 <div class="my-group-tag" role="button" tabindex="0"><span class="my-group-tag-grab" title="ドラッグして、この要素だけ移動">⋮⋮</span><span class="my-group-tag-name"></span></div>`;
   return d;
 }
 
-// エディタが実際に見えている縦の範囲（画面座標）。エディタを囲むスクロール領域・overflow で切られる領域と、画面の共通部分。
-// スクロールで隠れた行の縦線やタグが、画面の手前（ほかの部品の上）に出てしまわないよう、この範囲で切り取る
 let groupClipCache = { editor: null, nodes: [], at: 0 };
 function groupVisibleBand(editor) {
   const now = performance.now();
@@ -2059,7 +2378,7 @@ function groupVisibleBand(editor) {
     const nodes = [];
     for (let n = editor; n && n !== document.documentElement; n = n.parentElement) {
       const cs = getComputedStyle(n);
-      if (cs.overflowY !== "visible") nodes.push(n); // hidden / clip / auto / scroll
+      if (cs.overflowY !== "visible") nodes.push(n);
     }
     groupClipCache = { editor, nodes, at: now };
   }
@@ -2075,8 +2394,6 @@ function groupVisibleBand(editor) {
   return { top, bottom: Math.max(top, bottom) };
 }
 
-// box の縦の表示範囲を band に切り取る（横は切らない。タグは縦線より左に出るため）。
-// box は大きさ 0 のこともあるので、inset() ではなく座標で指定する
 function clipGroupBox(box, band) {
   if (!box) return;
   const r = box.getBoundingClientRect();
@@ -2089,35 +2406,30 @@ function clipGroupBox(box, band) {
   }
 }
 
-// 縦線を描く。範囲（最初の行の上端〜最後の行の下端）を、途中の空行や行間も含めて1本につなげる。
-// 消えた行の範囲・グループはここで取り除く
 function renderGroupBars() {
-  // 行が消えた範囲はここでは消さない（Ctrl+Z で戻ったときに復活できるよう、syncGroups が覚えておく）
+
   for (let i = groups.length - 1; i >= 0; i--) {
     if (groups[i].spans.length === 0) groups.splice(i, 1);
   }
-  // 描くものがあるときは、レイヤーが消えていたり最上位レイヤーから外れていたりしたら作り直す
-  // （リロード直後はDeepLの再描画でレイヤーが失われることがあり、そのままだと縦線が出ない）
+
   const layer = groups.some((g) => g.spans.some(spanLive))
     ? ensureGroupLayer()
     : document.getElementById("my-group-layer");
   if (!layer) return;
   const box = layer.querySelector(".my-group-bars");
-  let linesBox = layer.querySelector(".my-group-lines"); // 範囲の上下に引く薄いボーダー（縦線より奥）
+  let linesBox = layer.querySelector(".my-group-lines");
   if (!linesBox) {
     linesBox = document.createElement("div");
     linesBox.className = "my-group-lines";
     layer.insertBefore(linesBox, box);
   }
 
-  // body に filter があると position の基準が変わるので、レイヤー自身の位置を原点にして座標を出す
   const origin = layer.getBoundingClientRect();
 
-  // 1) 各範囲の位置を測る
   const items = [];
   for (const g of groups) {
     for (const sp of g.spans) {
-      if (!spanLive(sp)) continue; // 行が見つからない範囲は描かない
+      if (!spanLive(sp)) continue;
       const a = groupNodeRect(sp.first);
       const b = groupNodeRect(sp.last);
       const top = Math.min(a.top, b.top);
@@ -2127,7 +2439,6 @@ function renderGroupBars() {
     }
   }
 
-  // 2) 縦に重なる範囲は、別の列に置いて左へずらす
   items.sort((x, y) => x.top - y.top || x.bottom - y.bottom);
   const laneEnd = [];
   for (const it of items) {
@@ -2137,7 +2448,6 @@ function renderGroupBars() {
     it.lane = k;
   }
 
-  // 行がすき間なく続いている同じグループの範囲を、1つの「連なり」として扱う（まとめて移動するため）
   const runOf = new Map();
   if (groups.some((g) => g.spans.length > 1)) {
     const ed = getSourceEditor();
@@ -2151,9 +2461,8 @@ function renderGroupBars() {
   while (box.children.length > items.length) box.lastChild.remove();
   while (box.children.length < items.length) box.appendChild(createGroupBar());
 
-  // 3) 縦線とタグを更新する（名前・色・幅が変わったときだけ、タグの大きさを測り直す）
-  const placed = []; // 配置済みのタグの位置（重なり避け用）
-  let hoverIt = null; // いまマウスが乗っている縦線
+  const placed = [];
+  let hoverIt = null;
   items.forEach((it, i) => {
     const d = box.children[i];
     const tag = d.querySelector(".my-group-tag");
@@ -2162,14 +2471,13 @@ function renderGroupBars() {
     d._sp = it.sp;
     it.run = runOf.get(it.sp) || [it.sp];
 
-    // 縦線がタグ＋つまみより短い（1行だけ）ときは、コンパクト表示にする。切り替わったら、タグの大きさを測り直す
     const compact = it.bottom - it.top < (d._tagH || 22) + 14;
     if (d._compact !== compact) {
       d._compact = compact;
       d.classList.toggle("is-compact", compact);
       d._name = null;
     }
-    // 連なり（2件以上）の一員か。変わったら、タグの大きさ・説明文を作り直す
+
     const runN = it.run.length;
     if (d._runN !== runN) {
       d._runN = runN;
@@ -2178,15 +2486,15 @@ function renderGroupBars() {
     }
     const dragState = groupDrag || groupMove;
     d.classList.toggle("is-dragging", !!dragState && (dragState.sps ? dragState.sps.includes(it.sp) : dragState.sp === it.sp));
-    // 行ごと動かしている間（マウスに追従するタグを出しているあいだ）は、元の要素を半透明にする
+
     d.classList.toggle("is-move-ghost", !!groupMove && groupMove.active && groupMove.sps.includes(it.sp));
     if (d.matches(":hover")) {
       hoverIt = it;
-      it.single = !!d.querySelector(".my-group-tag:hover, .my-group-grip:hover"); // タグ・つまみの上なら「この要素だけ」
+      it.single = !!d.querySelector(".my-group-tag:hover, .my-group-grip:hover");
     }
 
-    const barX = it.left - GROUP_BAR.gap - GROUP_BAR.width - it.lane * GROUP_BAR.step; // 縦線の左端（画面上）
-    const maxW = Math.max(40, Math.min(GROUP_TAG.maxWidth, barX + GROUP_BAR.width - 4)); // 画面の左端からはみ出さない
+    const barX = it.left - GROUP_BAR.gap - GROUP_BAR.width - it.lane * GROUP_BAR.step;
+    const maxW = Math.max(40, Math.min(GROUP_TAG.maxWidth, barX + GROUP_BAR.width - 4));
 
     const label = groupLabel(g, it.sp);
     if (d._name !== label || d._color !== g.color || d._maxW !== maxW) {
@@ -2194,10 +2502,10 @@ function renderGroupBars() {
       d._color = g.color;
       d._maxW = maxW;
       d.style.backgroundColor = g.color;
-      d.style.setProperty("--g-color", g.color); // つまみの色
+      d.style.setProperty("--g-color", g.color);
       d.title = runN > 1
         ? `${label}\nドラッグ：連続する${runN}件をまとめて移動\nAlt+ドラッグ / ⋮⋮：この要素だけ移動`
-        : label; // ホバーで「グループ名 アイテム名」の全文が見える
+        : label;
       tag.style.backgroundColor = g.color;
       tag.style.maxWidth = `${maxW}px`;
       tag.querySelector(".my-group-tag-name").textContent = label;
@@ -2215,7 +2523,6 @@ function renderGroupBars() {
       d.style.height = `${it.bottom - it.top}px`;
     }
 
-    // タグは縦線の右端にそろえて、左へ突き出す。他のタグと重なるときは下へずらす
     const x1 = barX + GROUP_BAR.width;
     const x0 = x1 - d._tagW;
     let y = it.top;
@@ -2236,7 +2543,6 @@ function renderGroupBars() {
     }
   });
 
-  // スクロールで見えなくなった部分は、縦線・タグ・線・ホバーの色を切り取る
   const editorNow = getSourceEditor();
   if (editorNow) {
     const band = groupVisibleBand(editorNow);
@@ -2245,7 +2551,6 @@ function renderGroupBars() {
     clipGroupBox(layer.querySelector(".my-group-hl"), band);
   }
 
-  // ホバー中（ドラッグ中はドラッグしているグループ）の範囲の文字を、グループの色で薄くマークする
   const dragState2 = groupDrag || (groupMove && groupMove.active ? groupMove : null);
   let hlSps = null;
   let hlColor = "";
@@ -2253,15 +2558,13 @@ function renderGroupBars() {
     hlSps = dragState2.sps || [dragState2.sp];
     hlColor = dragState2.g.color;
   } else if (hoverIt) {
-    // 連なっているときは、連なり全体をマークする（タグ・つまみの上、または Alt を押している間は、その要素だけ）
+
     hlSps = hoverIt.single || groupAltDown ? [hoverIt.sp] : hoverIt.run;
     hlColor = hoverIt.g.color;
   }
   renderGroupHover(layer, origin, hlSps, hlColor);
 }
 
-// 同じグループの範囲のうち、行がすき間なく連続しているものを、上から順に「連なり」ごとの配列にして返す。
-// （1件だけの範囲も、長さ1の連なりとして含む）
 function groupRunsOf(g, lines) {
   const arr = [];
   for (const s of g.spans) {
@@ -2280,12 +2583,10 @@ function groupRunsOf(g, lines) {
   return runs.map((r) => r.map((x) => x.s));
 }
 
-// sp を含む連なり（上から順）。見つからなければ sp だけ
 function groupRunOf(g, sp, lines) {
   return groupRunsOf(g, lines).find((r) => r.includes(sp)) || [sp];
 }
 
-// Alt（Option）を押している間の状態を追う
 function setupGroupAltKey() {
   const set = (e) => {
     groupAltDown = !!e.altKey;
@@ -2295,7 +2596,6 @@ function setupGroupAltKey() {
   window.addEventListener("blur", () => (groupAltDown = false));
 }
 
-// 範囲（複数可）に含まれる文字（折り返した行ごと）の背景に、薄い色の四角を重ねる。sps が null のときは消す
 function renderGroupHover(layer, origin, sps, color) {
   const box = layer.querySelector(".my-group-hl");
   if (!box) return;
@@ -2329,14 +2629,14 @@ function renderGroupHover(layer, origin, sps, color) {
 function groupLoop() {
   groupRaf = 0;
   groupTimer = 0;
-  // 行との対応の取り直し：編集があったとき、または宙に浮いた範囲を探し続けるとき（たまに）
+
   const now = performance.now();
   const booting = now < groupBootUntil;
   if (groupDirty || (groupHasOrphan && now - groupSyncAt > (booting ? 80 : 1500))) syncGroups();
   renderGroupBars();
   const anyLive = groups.some((g) => g.spans.some(spanLive));
   if (anyLive || groupDirty) groupRaf = requestAnimationFrame(groupLoop);
-  else if (groups.length) groupTimer = setTimeout(groupLoop, booting ? 80 : 500); // 縦線がないあいだは見回る（リロード直後は短い間隔で）
+  else if (groups.length) groupTimer = setTimeout(groupLoop, booting ? 80 : 500);
   if (!booting && groupHasOrphan && !anyLive && !groupWarned && groupBootUntil) {
     groupWarned = true;
     console.warn("[group] 保存したグループに合う行が見つかりません。文章が保存時と違う可能性があります");
@@ -2352,37 +2652,26 @@ function startGroupLoop() {
   groupRaf = requestAnimationFrame(groupLoop);
 }
 
-// グループの内容が変わった（または、行の変化があったかもしれない）と伝える。次のフレームで対応の取り直しと保存を行う
 function touchGroups() {
   groupDirty = true;
   startGroupLoop();
 }
 
-// ===== 行との対応づけ・保存・復元 =====
-// 範囲（span）は「最初の行の要素 / 最後の行の要素」を持つが、DeepLは Ctrl+Z などで行の要素を作り直すことがある。
-// そのたびにグループを消すのではなく、次のようにする：
-//   ・生きている範囲 … 含まれる行の文字を「記録」として覚えておく（毎回更新・履歴つき）
-//   ・行の要素が消えた範囲 … グループは残し、見えない状態（宙に浮いた状態）にする
-//   ・宙に浮いた範囲 … 行が作り直されて、記録と同じ文字の行が現れたら、そこへ付け直す
-// 記録は chrome.storage にも保存するので、ページを再読み込みしたあとも、同じ文字の行にグループが戻る。
-// タグに出す文字：「グループ名 アイテム名」
 function groupLabel(g, sp) {
   return [g.name, sp && sp.item].filter(Boolean).join(" ");
 }
 
 function makeSpan(first, last, item = "") {
-  return { first, last, item, a: -1, snaps: [], lostAt: 0, full: null, els: [], total: 0, undo: [] }; // item: アイテム名（グループの中の、この範囲の名前） // a: 最後に確認した行番号 / snaps: 行の文字の記録（新しい順）
+  return { first, last, item, a: -1, snaps: [], lostAt: 0, full: null, els: [], total: 0, undo: [] };
 }
 
 function spanLive(sp) {
   return !!(sp.first && sp.last && sp.first.isConnected && sp.last.isConnected);
 }
 
-// 照合用の文字：改行の差・NBSP・行末の空白の違いで一致しなくならないよう、そろえてから比べる
 const normSnap = (t) => String(t).replace(/\u00a0/g, " ").replace(/\s+$/, "").slice(0, GROUP_SNAP_TEXT_MAX);
 const snapText = (el) => normSnap(groupLineText(el));
 
-// 行の探索先。編集できる状態のエディタがまだないとき（リロード直後など）は、翻訳元の入力欄そのものを使う
 function getGroupEditor() {
   const ed = getSourceEditor();
   if (ed) return ed;
@@ -2400,8 +2689,6 @@ function pushSnap(sp, texts) {
   if (sp.snaps.length > GROUP_SNAP_HISTORY) sp.snaps.length = GROUP_SNAP_HISTORY;
 }
 
-// 宙に浮いた範囲に合う行の並びを探す。記録のどれかと（ほぼ）同じ文字の並びで、元の位置に近いものを選ぶ。
-// 空行だけが一致しても合致とは見なさない。すでに別の範囲が使っている行（taken）は選ばない
 function findSpanMatch(sp, T, total, taken) {
   let best = null;
   for (const snap of sp.snaps) {
@@ -2436,8 +2723,6 @@ function findSpanMatch(sp, T, total, taken) {
   return best;
 }
 
-// 範囲の行の「一部だけ」がDOMから消えたとき、残っている行（最初〜最後）に範囲を縮める。1行も残っていなければ false。
-// 縮める前の状態（行の文字・位置・全体の行数）は sp.undo に積んでおく（Ctrl+Z で戻ったときに広げ直すため）
 function shrinkSpanToSurvivors(sp, editor) {
   if (!editor || !sp.els || sp.els.length === 0) return false;
   const alive = sp.els.filter((el) => el.isConnected && editor.contains(el));
@@ -2452,7 +2737,6 @@ function shrinkSpanToSurvivors(sp, editor) {
   return true;
 }
 
-// Ctrl+Z / Ctrl+Y（Cmd+Z など）を押した直後の短い間だけ、「縮めた範囲を元に戻せるか」を確かめる
 function setupGroupHistory() {
   const mark = () => {
     groupHistoryUntil = performance.now() + 2000;
@@ -2476,16 +2760,12 @@ function setupGroupHistory() {
   );
 }
 
-// ===== グループの最後の行の末尾で Enter =====
-//   1回目：普通に改行して、できた新しい行までグループを伸ばす
-//   2回目（グループの最後の行が空行のとき）：その空行をグループから外す（改行は増やさない）。外れた行は、グループのない空白の行になる
-// 日本語入力の変換中の Enter、Shift / Ctrl / Alt / Cmd つきの Enter、複数カーソル編集中は対象外
 async function extendGroupAfterEnter(sp, idx, total) {
   const editor = getSourceEditor();
   if (!editor) return;
   let lines = null;
   for (let i = 0; i < 60; i++) {
-    await nextFrame(); // DeepL側の再描画待ち（先に次の Enter が来て行が増えていても、1行以上増えていれば進む）
+    await nextFrame();
     lines = editorLines(editor);
     if (lines.length > total) break;
   }
@@ -2514,7 +2794,6 @@ function onGroupEnterKey(e) {
   const idx = groupLineIndex(lines, node);
   if (idx < 0) return;
 
-  // この行が最後の行になっている範囲を探す
   let hit = null;
   for (const g of groups) {
     for (const sp of g.spans) {
@@ -2525,7 +2804,6 @@ function onGroupEnterKey(e) {
   }
   if (!hit) return;
 
-  // カーソルが行の末尾にあるか
   const end = groupLineEdge(lines[idx], true);
   const tail = document.createRange();
   tail.setStart(range.startContainer, range.startOffset);
@@ -2534,7 +2812,7 @@ function onGroupEnterKey(e) {
 
   const isBlank = groupLineText(lines[idx]).trim() === "";
   if (isBlank && hit.a >= 0 && hit.a < idx) {
-    // 2回目：空行をグループから外す。Enter は DeepL に渡さない（行は増やさない）
+
     e.preventDefault();
     e.stopPropagation();
     hit.sp.last = lines[idx - 1];
@@ -2543,7 +2821,6 @@ function onGroupEnterKey(e) {
     return;
   }
 
-  // 1回目：Enter は普通に処理させて、できた新しい行までグループを伸ばす
   extendGroupAfterEnter(hit.sp, idx, lines.length).catch((err) => console.error("[group] Enterでの延長に失敗:", err));
 }
 
@@ -2557,10 +2834,6 @@ function syncGroups() {
 
   const editor = getGroupEditor();
 
-  // 1) 行の要素が消えた範囲
-  //    ・含まれていた行の「一部だけ」が消えたとき（空行を Backspace で消した／後ろの行を含めて文字を消した など）は、
-  //      残っている行だけに縮める。グループは残す。縮める前の状態は sp.undo に覚えておき、Ctrl+Z で戻ったら広げ直す
-  //    ・すべての行が消えたときだけ、グループを残したまま宙に浮かせる（あとで同じ文字の行が現れたら付け直す）
   for (const g of groups) {
     for (const sp of g.spans) {
       if (spanLive(sp)) continue;
@@ -2573,19 +2846,16 @@ function syncGroups() {
   if (editor) {
     const lines = editorLines(editor);
     const texts = new Array(lines.length);
-    const T = (i) => (texts[i] ??= snapText(lines[i])); // 必要な行だけ文字を取り出す
-    const taken = new Set(); // 生きている範囲が使っている行
+    const T = (i) => (texts[i] ??= snapText(lines[i]));
+    const taken = new Set();
 
-    // 2) 生きている範囲：行の位置を調べる
     const live = [];
     for (const g of groups) {
       for (const sp of g.spans) {
         if (!spanLive(sp)) continue;
         const a = groupLineIndex(lines, sp.first);
         const b = groupLineIndex(lines, sp.last);
-        // 現在のエディタの行に含まれない、または画面上に表示されていない要素を指している範囲は、
-        // 「生きている」扱いにせず宙に浮かせて、あとで正しい行へ付け直す
-        // （リロード直後に見えない要素へ付いたまま、再照合されなくなるのを防ぐ）
+
         const ra = a >= 0 ? groupNodeRect(sp.first) : null;
         if (a < 0 || b < a || (ra.width === 0 && ra.height === 0)) {
           sp.first = sp.last = null;
@@ -2598,8 +2868,6 @@ function syncGroups() {
       }
     }
 
-    // 2b) Ctrl+Z / Ctrl+Y の直後だけ：縮めた範囲が、縮める前と同じ文章・同じ行数に戻っていたら、元の大きさに広げ直す。
-    //     （ふだんは広げない。空行を消したあとに、下にある別の空行を巻き込んで元に戻ってしまうのを防ぐため）
     if (performance.now() < groupHistoryUntil) {
       for (const x of live) {
         const list = x.sp.undo;
@@ -2610,7 +2878,7 @@ function syncGroups() {
           const cur = x.b - x.a + 1;
           if (lines.length !== u.total || x.a !== u.a || cur >= n) continue;
           let ok = true;
-          for (let k = cur; k < n && ok; k++) if (taken.has(x.a + k)) ok = false; // 別の範囲の行は取らない
+          for (let k = cur; k < n && ok; k++) if (taken.has(x.a + k)) ok = false;
           for (let k = 0; k < n && ok; k++) if (T(x.a + k) !== u.texts[k]) ok = false;
           if (!ok) continue;
           x.b = x.a + n - 1;
@@ -2622,17 +2890,15 @@ function syncGroups() {
       }
     }
 
-    // 2c) 行の位置・文字・要素を記録し直す
     for (const x of live) {
       const { sp, a, b } = x;
       sp.a = a;
       pushSnap(sp, Array.from({ length: b - a + 1 }, (_, k) => T(a + k)));
-      sp.full = Array.from({ length: b - a + 1 }, (_, k) => groupLineText(lines[a + k])); // 代入用に、切り詰めない全文も覚える
-      sp.els = lines.slice(a, b + 1); // 一部の行だけ消えたとき、残った行を見つけるために覚えておく
+      sp.full = Array.from({ length: b - a + 1 }, (_, k) => groupLineText(lines[a + k]));
+      sp.els = lines.slice(a, b + 1);
       sp.total = lines.length;
     }
 
-    // 3) 宙に浮いた範囲：同じ文字の行が現れていたら、付け直す
     const orphans = [];
     for (const g of groups) for (const sp of g.spans) if (!spanLive(sp)) orphans.push(sp);
     orphans.sort((x, y) => x.a - y.a);
@@ -2651,7 +2917,6 @@ function syncGroups() {
     }
   }
 
-  // 4) 後片付け：記録のない範囲・空行だけの宙に浮いた範囲は捨てる。宙に浮いた範囲が多すぎるときは、古いものから捨てる
   for (const g of groups) {
     g.spans = g.spans.filter((sp) => spanLive(sp) || sp.snaps[0]?.some((t) => t));
   }
@@ -2676,12 +2941,11 @@ function syncGroups() {
   }
   groupHasOrphan = groups.some((g) => g.spans.some((sp) => !spanLive(sp)));
 
-  syncGroupLibrary(); // 名前・色・中身をライブラリに反映する（解除・削除したあとも残す）
+  syncGroupLibrary();
 
   saveGroups();
 }
 
-// 保存する形：グループ名・色・各範囲の（行番号, 行の文字）
 function serializeGroups() {
   const data = groups
     .map((g) => ({
@@ -2695,19 +2959,17 @@ function serializeGroups() {
 }
 
 function saveGroups() {
-  if (!groupsLoaded) return; // 保存済みの内容を読み込む前に、空の状態で上書きしない
+  if (!groupsLoaded) return;
   const { data, json } = serializeGroups();
   if (json === groupSavedJson) return;
   groupSavedJson = json;
   storageSet({ [GROUP_STORAGE_KEY]: data });
 }
 
-// ページを開いたとき、保存済みのグループを読み込む。行はまだ見つかっていないので、最初は宙に浮いた状態にして、
-// エディタに同じ文字の行が現れたら syncGroups が付け直す
 async function loadSavedGroups() {
   const stored = await storageGet([GROUP_STORAGE_KEY, GROUP_LIBRARY_KEY]);
   const saved = stored[GROUP_STORAGE_KEY];
-  groupLibrary = sanitizeLibrary(stored[GROUP_LIBRARY_KEY]); // 保存してあるグループ（解除・削除したものも含む）
+  groupLibrary = sanitizeLibrary(stored[GROUP_LIBRARY_KEY]);
   groupLibSavedJson = JSON.stringify(groupLibrary);
   groupLibLoaded = true;
   if (Array.isArray(saved)) {
@@ -2733,14 +2995,13 @@ async function loadSavedGroups() {
   if (GROUP_DEBUG) console.log("[group-debug] loaded", { saved: Array.isArray(saved) ? saved.length : saved, groups: groups.length });
   groupsLoaded = true;
   groupSavedJson = "";
-  groupBootUntil = performance.now() + 30000; // 30秒のあいだは、文字が入った瞬間に付け直せるよう短い間隔で探す
+  groupBootUntil = performance.now() + 30000;
   if (groups.length) {
     ensureGroupLayer();
     touchGroups();
   }
 }
 
-// エディタが編集されたら（DOMが変わったら）、行との対応を取り直す。グループの縦線・ポップアップ自身の変化は無視する
 function setupGroupObserver() {
   new MutationObserver((mutations) => {
     if (groups.length === 0) return;
@@ -2751,21 +3012,14 @@ function setupGroupObserver() {
     ];
     if (mutations.some((m) => !skip.some((s) => s && s.contains(m.target)))) touchGroups();
   }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  // DOMの変化として見えない更新に備えて、操作があったときも、宙に浮いたグループがあれば探し直す
+
   ["focusin", "selectionchange", "input", "pointerdown", "keyup"].forEach((type) =>
     document.addEventListener(type, () => { if (groupHasOrphan) touchGroups(); }, true)
   );
 }
 
-// ===== 縦線の何もない部分をドラッグして、その範囲の行を上下に動かす =====
-// 同じグループのタグ（範囲）が連続しているときは、連続しているぶんをすべて一斉に動かす。
-//   ・この要素だけ動かしたいとき：Alt（Option）を押しながらドラッグ / タグの左の「⋮⋮」をドラッグ / タグ（1行だけのとき）をドラッグ
-// ドラッグ中は、落とす位置（行と行のあいだ）に、グループの色の横線を出す。離すと、その位置へ行ごと移動する。
-// 移動は「元の行を削除 → 落とす位置に空行を作る → 同じ文字を貼り付けてグループを付け直す」で行う
-// （DeepLのエディタは直接書き換えられないため）。元の位置と同じ・範囲の中には落とせない。Esc で取り消す。
-const GROUP_MOVE_THRESHOLD = 5; // この距離(px)以上動かしたら、移動のドラッグとみなす
+const GROUP_MOVE_THRESHOLD = 5;
 
-// 行の先頭・末尾にあたる位置（range の端に使う）。文字のない行は、行の要素の先頭
 function groupLineEdge(el, atEnd) {
   if (el.nodeType === Node.TEXT_NODE) return { node: el, off: atEnd ? el.nodeValue.length : 0 };
   let first = null;
@@ -2788,7 +3042,6 @@ function groupCaretAt(point) {
   sel.addRange(r);
 }
 
-// 行数が expected になるまで待つ（DeepL側の再描画待ち。最大 約1秒）。なったら true
 async function waitForLineCount(editor, expected) {
   for (let i = 0; i < 60; i++) {
     await nextFrame();
@@ -2797,7 +3050,6 @@ async function waitForLineCount(editor, expected) {
   return editorLines(editor).length === expected;
 }
 
-// y の位置に一番近い「行と行のあいだ」の番号（0 = 最初の行の前、lines.length = 最後の行の後ろ）
 function groupBoundaryAtY(lines, y) {
   for (let i = 0; i < lines.length; i++) {
     const r = groupNodeRect(lines[i]);
@@ -2807,7 +3059,6 @@ function groupBoundaryAtY(lines, y) {
   return lines.length;
 }
 
-// 番号 k の「あいだ」の画面上の高さ
 function groupBoundaryY(lines, k) {
   const top = (i) => groupNodeRect(lines[i]).top;
   const bottom = (i) => groupNodeRect(lines[i]).bottom;
@@ -2820,8 +3071,6 @@ function removeGroupMoveIndicator() {
   document.getElementById("my-group-drop")?.remove();
 }
 
-// タグと同じ見た目の小さな要素を、マウスの動きに合わせて出す（「持っている」感を出すため）。
-// 連なった複数件をまとめて動かしているときは、件ごとに分けて出し、それぞれ半透明にする
 function showGroupDragGhost(m) {
   hideGroupDragGhost();
   const layer = ensureGroupLayer();
@@ -2840,7 +3089,6 @@ function showGroupDragGhost(m) {
   updateGroupDragGhostPos(m.x, m.y);
 }
 
-// マウスの少し右下に出す（カーソルそのものに隠れないように）
 function updateGroupDragGhostPos(x, y) {
   if (!groupDragGhost) return;
   const layer = document.getElementById("my-group-layer");
@@ -2856,7 +3104,6 @@ function hideGroupDragGhost() {
   groupDragGhost = null;
 }
 
-// 落とす位置の横線。t が -1（落とせない位置）のときは消す
 function renderGroupMoveIndicator(editor, lines, t, color) {
   if (t < 0) {
     removeGroupMoveIndicator();
@@ -2897,7 +3144,7 @@ function updateGroupMove() {
     return;
   }
   const t = groupBoundaryAtY(lines, m.y);
-  m.t = t < a || t > b + 1 ? t : -1; // 自分の範囲の中・すぐ前後は、動かないのと同じ
+  m.t = t < a || t > b + 1 ? t : -1;
   renderGroupMoveIndicator(editor, lines, m.t, m.g.color);
 }
 
@@ -2912,8 +3159,8 @@ function onGroupMoveMove(e) {
     closeGroupPopover();
     exitMulti();
     document.documentElement.classList.add("my-group-moving");
-    showGroupDragGhost(m); // タグと同じ見た目の要素をマウスに追従させる
-    renderGroupBars(); // 元の要素を半透明にする
+    showGroupDragGhost(m);
+    renderGroupBars();
   }
   if (groupDragGhost) updateGroupDragGhostPos(m.x, m.y);
   e.preventDefault();
@@ -2925,7 +3172,7 @@ function onGroupMoveUp(e) {
   if (!m || e.pointerId !== m.pointerId) return;
   if (m.active && e.type === "pointerup") {
     m.y = e.clientY;
-    updateGroupMove(); // 最後の位置で決め直す
+    updateGroupMove();
   }
   endGroupMove(e.type === "pointercancel");
 }
@@ -2937,8 +3184,6 @@ function onGroupMoveKey(e) {
   endGroupMove(true);
 }
 
-// from: 押した位置 { sx, sy }（省略すると、いまのイベントの位置）。タグから始めるときは、つまんだ位置を渡す
-// opts.single: true のとき、この要素（sp）だけを動かす。false のときは、sp を含む連続した同じグループの範囲を、まとめて動かす
 function startGroupMove(g, sp, e, from, opts = {}) {
   if (groupDrag || groupMove || g._moving || !spanLive(sp)) return;
   const editor = getSourceEditor();
@@ -2965,8 +3210,8 @@ function endGroupMove(cancel) {
   window.removeEventListener("keydown", onGroupMoveKey, true);
   document.documentElement.classList.remove("my-group-moving");
   removeGroupMoveIndicator();
-  hideGroupDragGhost(); // マウスに追従させていたタグを消す
-  if (m.active) groupSuppressClick = true; // 離した直後のクリック（タグなど）は無視する
+  hideGroupDragGhost();
+  if (m.active) groupSuppressClick = true;
   if (m.active) setTimeout(() => (groupSuppressClick = false), 50);
   if (!cancel && m.active && m.t >= 0) {
     moveGroupSpans(m.g, m.sps, m.t).catch((err) => console.error("[group] 行の移動に失敗:", err));
@@ -2974,8 +3219,6 @@ function endGroupMove(cancel) {
   renderGroupBars();
 }
 
-// 範囲（sps：上から順に、行がすき間なく続いているもの）の行を、まとめて t（行と行のあいだの番号。元の行番号で数える）の位置へ動かす。
-// 1件だけ渡せば、その範囲だけが動く。複数渡したときは、それぞれのアイテム名・相対的な位置を保ったまま動く
 async function moveGroupSpans(g, sps, t) {
   const editor = getSourceEditor();
   if (!editor || g._moving || sps.length === 0 || !sps.every(spanLive)) return;
@@ -2987,7 +3230,7 @@ async function moveGroupSpans(g, sps, t) {
 
   g._moving = true;
   const { name, color } = g;
-  // 各範囲が、動かすブロックの何行目から何行目か（0始まり）
+
   const parts = sps.map((sp) => ({
     item: sp.item || "",
     start: groupLineIndex(lines, sp.first) - a,
@@ -3001,10 +3244,9 @@ async function moveGroupSpans(g, sps, t) {
   try {
     exitMulti();
     closeGroupPopover();
-    syncGroups(); // 動かす前の状態を記録しておく
-    g.spans = g.spans.filter((s) => !sps.includes(s)); // 貼り付け直すときに付け直すので、古い範囲は外す
+    syncGroups();
+    g.spans = g.spans.filter((s) => !sps.includes(s));
 
-    // 1) 元の行を、前後の改行ごと削除する（空行を残さない）
     const range = document.createRange();
     let from;
     let to;
@@ -3025,14 +3267,13 @@ async function moveGroupSpans(g, sps, t) {
     await waitForLineCount(editor, total - n);
     lines = editorLines(editor);
     if (lines.length === total) {
-      // 何も消えなかった：元に戻して終わる
+
       g.spans.push(...sps);
       console.warn("[group] 行を削除できなかったため、移動をやめました");
       return;
     }
     removed = true;
 
-    // 2) 落とす位置に空行を1つ作る
     const newT = Math.min(t > b ? t - n : t, lines.length);
     if (newT === 0) groupCaretAt(groupLineEdge(lines[0], false));
     else groupCaretAt(groupLineEdge(lines[newT - 1], true));
@@ -3043,13 +3284,12 @@ async function moveGroupSpans(g, sps, t) {
     if (!lines[newT]) throw new Error("空行を作れませんでした");
     groupCaretAt(groupLineEdge(lines[newT], false));
 
-    // 3) 同じ文字を貼り付けて、グループを付け直す（貼り付けと同じ処理）。連なっていた範囲は、まとめて付け直る
     await pasteGroupedText({
       text: texts.join("\n"),
       groups: parts.map((p) => ({ name, color, item: p.item, start: p.start, end: p.end })),
     });
   } catch (err) {
-    // 削除のあとに失敗したときは、文字が消えたままにならないよう、グループなしで入れ直す
+
     if (removed) console.error("[group] 移動の途中で失敗しました。Ctrl+Z で元に戻せます:", err);
     else throw err;
   } finally {
@@ -3058,10 +3298,6 @@ async function moveGroupSpans(g, sps, t) {
   }
 }
 
-// ===== 縦線の端をドラッグして、グループに含める行を増減する =====
-// 縦線の上端・下端のつまみを上下に引っ張ると、その端が、ポインターの位置にいちばん近い行まで動く。
-// ドラッグ中は見た目だけ変えて、離したときに確定する（ほかのグループの行に重ねたときは、グループ追加と同じく上書きされる）。
-// Esc で取り消す。
 function groupLineIndexAtY(lines, y) {
   let best = -1;
   let bestDist = Infinity;
@@ -3086,10 +3322,10 @@ function updateGroupDrag() {
   const lines = editorLines(editor);
   const fi = groupLineIndex(lines, d.sp.first);
   const li = groupLineIndex(lines, d.sp.last);
-  // つまんだ位置と端のずれを引いて、「端そのもの」の位置で行を探す（つかんだ瞬間に飛ばないように）
+
   const at = groupLineIndexAtY(lines, d.y - d.dy + (d.edge === "top" ? 2 : -2));
   if (fi < 0 || li < 0 || at < 0) return;
-  // 最低でも1行は残す（上端を最後の行より下へ、下端を最初の行より上へは動かせない）
+
   if (d.edge === "top") d.sp.first = lines[Math.min(at, li)];
   else d.sp.last = lines[Math.max(at, fi)];
   renderGroupBars();
@@ -3148,20 +3384,19 @@ function endGroupDrag(cancel) {
     d.sp.first = d.first;
     d.sp.last = d.last;
   } else {
-    updateGroupDrag(); // 最後の位置を反映する
+    updateGroupDrag();
     groupDrag = null;
     if (spanLive(d.sp)) {
-      overwriteGroupSpans(d.sp, d.g); // ほかのグループの行に重なったら上書き（グループ追加と同じ）
-      d.g.spans = mergeGroupSpan(d.g.spans.filter((s) => s !== d.sp), d.sp); // 同じグループの隣り合う範囲とは1本につなげる
+      overwriteGroupSpans(d.sp, d.g);
+      d.g.spans = mergeGroupSpan(d.g.spans.filter((s) => s !== d.sp), d.sp);
     }
   }
   groupDrag = null;
-  if (groupSuppressClick) setTimeout(() => (groupSuppressClick = false), 50); // 離した直後のクリックだけ無視する
+  if (groupSuppressClick) setTimeout(() => (groupSuppressClick = false), 50);
   touchGroups();
   renderGroupBars();
 }
 
-// ノードの文書内での前後（a が前なら負）
 function docCmp(a, b) {
   if (a === b) return 0;
   return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
@@ -3171,23 +3406,21 @@ function isNextTo(a, b) {
   return a.nextSibling === b || a.nextElementSibling === b;
 }
 
-// 2つの範囲が重なっている、または隣り合っているか
 function groupSpansTouch(a, b) {
-  const aBefore = docCmp(a.last, b.first) < 0 && !isNextTo(a.last, b.first); // a が b より前で、間に行がある
+  const aBefore = docCmp(a.last, b.first) < 0 && !isNextTo(a.last, b.first);
   const bBefore = docCmp(b.last, a.first) < 0 && !isNextTo(b.last, a.first);
   return !aBefore && !bBefore;
 }
 
-// 範囲を足す。重なる・隣り合う範囲があれば1つにまとめる（縦線を区切らないため）
 function mergeGroupSpan(spans, add) {
-  if (!spanLive(add)) return spans.concat([add]); // 宙に浮いた範囲はそのまま持っておく
+  if (!spanLive(add)) return spans.concat([add]);
   const cur = makeSpan(add.first, add.last, add.item);
-  const floating = spans.filter((o) => !spanLive(o)); // 宙に浮いた範囲は、つなげる対象にしない
+  const floating = spans.filter((o) => !spanLive(o));
   let rest = spans.filter(spanLive);
   for (let changed = true; changed; ) {
     changed = false;
     rest = rest.filter((o) => {
-      if (o.item !== cur.item || !groupSpansTouch(cur, o)) return true; // 同じアイテム名どうしだけ1本につなげる
+      if (o.item !== cur.item || !groupSpansTouch(cur, o)) return true;
       if (docCmp(o.first, cur.first) < 0) cur.first = o.first;
       if (docCmp(o.last, cur.last) > 0) cur.last = o.last;
       changed = true;
@@ -3198,11 +3431,6 @@ function mergeGroupSpan(spans, add) {
   return floating.concat(rest);
 }
 
-// すでに別のグループになっている行に、新しい範囲（span）を重ねたとき、古いグループの側を直す。
-//   ・新しい範囲に完全に覆われた古い範囲 … 消える（新しいグループで上書き）
-//   ・片側だけ覆われた古い範囲 … 覆われた行だけ削って短くなる
-//   ・新しい範囲が古い範囲の真ん中に入って分断された … 古い範囲は（両側とも）解除する
-// except: 新しい範囲を足す先のグループ（同じ名前・同じ色のグループは上書きではなく結合するので除く）
 function overwriteGroupSpans(span, except) {
   const lineAfter = (n) => (n.nodeType === Node.ELEMENT_NODE ? n.nextElementSibling : n.nextSibling);
   const lineBefore = (n) => (n.nodeType === Node.ELEMENT_NODE ? n.previousElementSibling : n.previousSibling);
@@ -3211,11 +3439,11 @@ function overwriteGroupSpans(span, except) {
     const kept = [];
     for (const o of g.spans) {
       if (g === except && o.item === span.item) {
-        kept.push(o); // 同じグループの同じアイテムは、上書きではなく結合する
+        kept.push(o);
         continue;
       }
       if (!spanLive(o)) {
-        kept.push(o); // 宙に浮いた範囲は、元に戻ったときに付け直せるよう、そのまま残す
+        kept.push(o);
         continue;
       }
       const overlaps = docCmp(o.last, span.first) >= 0 && docCmp(span.last, o.first) >= 0;
@@ -3223,19 +3451,19 @@ function overwriteGroupSpans(span, except) {
         kept.push(o);
         continue;
       }
-      const startsBefore = docCmp(o.first, span.first) < 0; // 古い範囲が、新しい範囲より前から始まっている
-      const endsAfter = docCmp(o.last, span.last) > 0; // 古い範囲が、新しい範囲より後ろまで続いている
-      if (startsBefore && endsAfter) continue; // 間に挟まれて分断された → 解除
+      const startsBefore = docCmp(o.first, span.first) < 0;
+      const endsAfter = docCmp(o.last, span.last) > 0;
+      if (startsBefore && endsAfter) continue;
       if (startsBefore) {
-        // 後ろ側が覆われた：新しい範囲の1つ前の行までにする
+
         const p = lineBefore(span.first);
         if (p && docCmp(p, o.first) >= 0) kept.push(makeSpan(o.first, p, o.item));
       } else if (endsAfter) {
-        // 前側が覆われた：新しい範囲の1つ後ろの行からにする
+
         const n = lineAfter(span.last);
         if (n && docCmp(n, o.last) <= 0) kept.push(makeSpan(n, o.last, o.item));
       }
-      // 完全に覆われた場合は、何も残さない
+
     }
     g.spans = kept;
   }
@@ -3244,9 +3472,6 @@ function overwriteGroupSpans(span, except) {
   }
 }
 
-// グループを追加する。
-//   ・すでに別のグループになっている行は、新しいグループで上書きする（overwriteGroupSpans 参照）
-//   ・同じ名前・同じ色のグループがあれば、そこに範囲を足す（重なる・隣り合う範囲は1本につなげる）
 function addGroup(name, color, span, item = "") {
   span = makeSpan(span.first, span.last, item);
   let g = groups.find((x) => x.name === name && x.color === color);
@@ -3261,8 +3486,6 @@ function addGroup(name, color, span, item = "") {
   touchGroups();
 }
 
-// アイテム（1つの範囲）だけを解除する。グループに他のアイテムが残っていれば、グループは残る。
-// 解除したアイテムは、ライブラリには残しておく
 function removeSpan(g, sp) {
   libKeepSpans(g, [sp]);
   g.spans = g.spans.filter((s) => s !== sp);
@@ -3281,18 +3504,12 @@ function removeGroup(g) {
   touchGroups();
 }
 
-// 範囲（最初の行〜最後の行）の中にあるノードか
 function groupSpanHasNode(sp, n) {
   const afterFirst = sp.first.contains(n) || sp.first.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING;
   const beforeLast = sp.last.contains(n) || sp.last.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_PRECEDING;
   return !!(afterFirst && beforeLast);
 }
 
-// 行番号 idx（削除した跡の空行）のまわりに連なっている空行を、ちょうど1つにする。
-// 取り除いた行があれば { start, count }、なければ null を返す。
-//   文1 / 空 / 文2 / 空 / 文3 の文2を消した → 文1 / 空 / 文3
-//   文1 / 文2 / 文3 の文2を消した             → 文1 / 空 / 文3
-// 文章の先頭・末尾に空行が来る場合は、まとめて取り除く（文章の間だけ、空行を1つ残す）。
 async function collapseBlankLinesAt(editor, idx) {
   const lines = editorLines(editor);
   if (idx < 0 || idx >= lines.length) return null;
@@ -3304,9 +3521,9 @@ async function collapseBlankLinesAt(editor, idx) {
   while (e < lines.length - 1 && isBlank(lines[e + 1])) e++;
   const atTop = s === 0;
   const atBottom = e === lines.length - 1;
-  if (atTop && atBottom) return null; // 全部が空行なら何もしない
-  const keep = atTop || atBottom ? 0 : 1; // 残す空行の数
-  const remove = e - s + 1 - keep; // 取り除く空行の数
+  if (atTop && atBottom) return null;
+  const keep = atTop || atBottom ? 0 : 1;
+  const remove = e - s + 1 - keep;
   if (remove <= 0) return null;
 
   let from;
@@ -3329,18 +3546,11 @@ async function collapseBlankLinesAt(editor, idx) {
   sel.removeAllRanges();
   sel.addRange(range);
   document.execCommand("delete");
-  await waitForLineCount(editor, lines.length - remove); // DeepL側の再描画を待つ
-  // 取り除いた行の番号の範囲（取り除く前の番号で数える）。残りの印の番号をずらすのに使う
+  await waitForLineCount(editor, lines.length - remove);
+
   return atTop ? { start: 0, count: e + 1 } : atBottom ? { start: s, count: e - s + 1 } : { start: s + 1, count: remove };
 }
 
-// 編集ポップアップの「削除」：グループ内の文字をすべて削除して、グループ（縦線）も外す。
-// 各範囲の「最初の文字〜最後の文字」を選択して削除する（途中の空行もまとめて消え、空の1行が残る）。
-// 後ろの範囲から順に消す。Ctrl+Z で元に戻せる。
-// 編集ポップアップの「削除」「グループをすべて削除」：範囲内の文字をすべて削除して、グループ（縦線）も外す。
-// only を渡すと、そのアイテム（1つの範囲）だけ。渡さないと、グループのすべてのアイテム。
-// 各範囲の「最初の文字〜最後の文字」を選択して削除する（途中の空行もまとめて消え、空の1行が残る）。
-// 後ろの範囲から順に消す。Ctrl+Z で元に戻せる。消した内容はライブラリに残る。
 async function deleteGroupText(g, only) {
   if (g._deleting) return;
   const editor = getSourceEditor();
@@ -3348,12 +3558,12 @@ async function deleteGroupText(g, only) {
   g._deleting = true;
   const targets = only ? [only] : g.spans.slice();
   try {
-    exitMulti(); // Ctrl+D のマルチ編集中なら終了する
+    exitMulti();
     closeGroupPopover();
-    syncGroups(); // 消す前の行の文字を記録しておく（Ctrl+Z で文字が戻ったとき、グループも戻せるように）
-    libKeepSpans(g, targets); // 消す前の内容をライブラリに残す
+    syncGroups();
+    libKeepSpans(g, targets);
     const spans = targets.filter(spanLive).sort((a, b) => docCmp(b.first, a.first));
-    const marks = []; // 削除した場所の行番号（あとで、残った空行を1つにまとめるのに使う）
+    const marks = [];
     for (const sp of spans) {
       const texts = editorTextNodes(editor).filter((n) => groupSpanHasNode(sp, n));
       if (texts.length === 0) continue;
@@ -3368,22 +3578,21 @@ async function deleteGroupText(g, only) {
       sel.removeAllRanges();
       sel.addRange(range);
       document.execCommand("delete");
-      await nextFrame(); // DeepL側の再描画を待つ
+      await nextFrame();
     }
-    // 削除した跡の空行が重なっていたら、1つにまとめる（後ろの場所から順に）
-    // （まとめると行がなくなって番号がずれるので、残りの印の番号も直す）
+
     marks.sort((x, y) => y - x);
     for (let i = 0; i < marks.length; i++) {
       if (marks[i] < 0) continue;
       const cut = await collapseBlankLinesAt(editor, marks[i]);
       if (!cut) continue;
       for (let j = i + 1; j < marks.length; j++) {
-        if (marks[j] >= cut.start) marks[j] = cut.start - 1; // 取り除かれた行の中にあった印は、残った行（または -1 = 無し）へ
+        if (marks[j] >= cut.start) marks[j] = cut.start - 1;
       }
     }
   } finally {
     g._deleting = false;
-    // 範囲は捨てずに見えない状態にしておく。Ctrl+Z で文字が戻れば、グループも戻る
+
     for (const sp of targets) {
       sp.first = sp.last = null;
       if (!sp.lostAt) sp.lostAt = Date.now();
@@ -3402,7 +3611,7 @@ function restoreGroupSelection(range) {
     sel.removeAllRanges();
     sel.addRange(range);
   } catch (err) {
-    // 範囲が無効になっていたら、そのままにする
+
   }
 }
 
@@ -3416,11 +3625,6 @@ function closeGroupPopover(restoreSelection = false) {
   if (restoreSelection && pop.saved) restoreGroupSelection(pop.saved.range);
 }
 
-// ポップアップ：[グループ名] [8色のパレット] [グループを追加]
-//   saved: { range, anchors }（クリックした時点の選択範囲と、含まれる行）  point: クリック位置
-// ポップアップ：[グループ名] [アイテム名] / [8色のパレット] / [グループを追加]
-//   saved: { range, anchors, mark? }（対象の選択範囲と、含まれる行。mark は見せておく範囲）  point: クリック位置
-//   グループ名が今あるグループと同じなら、色もそのグループに合わせる（同じ名前・同じ色が同じグループになるため）
 function openGroupPopover(saved, point) {
   closeGroupPopover();
   const layer = ensureGroupLayer();
@@ -3454,11 +3658,10 @@ function openGroupPopover(saved, point) {
     swatches.forEach((b) => b.setAttribute("aria-checked", String(b.dataset.color === color)));
   paintSwatches();
 
-  // グループ名の候補（いまのグループ＋ライブラリ）
-  const knownNames = new Map(); // 名前 → 色
+  const knownNames = new Map();
   for (const x of groupLibrary) if (!knownNames.has(x.name)) knownNames.set(x.name, x.color);
   for (const g of groups) knownNames.set(g.name, g.color);
-  // 名前が今あるグループと同じなら、色もそのグループに合わせる
+
   const syncColorFromName = () => {
     const c = knownNames.get(input.value.trim());
     if (c && GROUP_COLORS.some((x) => x.value === c)) {
@@ -3467,12 +3670,10 @@ function openGroupPopover(saved, point) {
     }
   };
 
-  // グループ名の候補：入力するたびに作り直す（最大 GROUP_SUGGEST_MAX 件）。
-  // 先頭が一致するものを先に、途中が一致するものをそのあとに並べる。空欄のときは新しい順
   const suggestBox = root.querySelector(".my-group-suggest");
   let suggestNames = [];
-  let suggestIdx = -1; // キーボード（↑↓）で選んでいる候補。-1 は未選択
-  let popPos = null; // ポップアップの現在位置 { x, y }（候補で高さが変わったとき、画面からはみ出さないよう直すため）
+  let suggestIdx = -1;
+  let popPos = null;
 
   const fitPopover = () => {
     if (!popPos) return;
@@ -3493,7 +3694,7 @@ function openGroupPopover(saved, point) {
     const starts = [];
     const contains = [];
     for (const n of knownNames.keys()) {
-      if (n === typed) continue; // 入力済みと同じものは出さない
+      if (n === typed) continue;
       const l = n.toLowerCase();
       if (!q || l.startsWith(q)) starts.push(n);
       else if (l.includes(q)) contains.push(n);
@@ -3560,23 +3761,21 @@ function openGroupPopover(saved, point) {
   );
   root.querySelector(".my-group-add").addEventListener("click", commit);
 
-  // 入力欄以外を押しても、入力欄からフォーカスが外れないようにする
   root.addEventListener("mousedown", (e) => {
     if (!(e.target instanceof Element && e.target.matches("input"))) e.preventDefault();
   });
-  // DeepL側のショートカットにキー入力を渡さない
+
   ["keydown", "keyup", "keypress"].forEach((type) => root.addEventListener(type, (e) => e.stopPropagation()));
   [input, itemInput].forEach((el) =>
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
         e.preventDefault();
-        if (el === input && suggestIdx >= 0) pickSuggest(suggestNames[suggestIdx]); // 候補を選んでいるときは、その名前を入れるだけ
+        if (el === input && suggestIdx >= 0) pickSuggest(suggestNames[suggestIdx]);
         else commit();
       }
     })
   );
 
-  // ポップアップの外を押したら閉じる
   const onOutside = (e) => {
     if (!root.isConnected) {
       document.removeEventListener("pointerdown", onOutside, true);
@@ -3588,14 +3787,12 @@ function openGroupPopover(saved, point) {
 
   layer.appendChild(root);
   groupPopover = { root, saved, onOutside };
-  renderSuggest(); // 開いた直後から候補（空欄のときは新しい順）を出す
+  renderSuggest();
 
-  // 対象の文字を見せたままにする
   if (window.CSS && CSS.highlights && typeof Highlight !== "undefined") {
     CSS.highlights.set(GROUP_TARGET_HIGHLIGHT, new Highlight(saved.mark || saved.range));
   }
 
-  // クリック位置の近くに置く。画面からはみ出すときは寄せる／上に出す
   const origin = layer.getBoundingClientRect();
   const w = root.offsetWidth;
   const h = root.offsetHeight;
@@ -3609,20 +3806,9 @@ function openGroupPopover(saved, point) {
   input.focus({ preventScroll: true });
 }
 
-// グループの編集ポップアップ（タグをクリックすると開く）
-//   [8色のパレット]          押すとすぐ、グループの色が変わる
-//   [解除]  [削除]           解除：グループだけ外す（文字はそのまま） / 削除：グループ内の文字をすべて削除してグループも外す
-// グループの編集ポップアップ（タグをクリックすると開く。sp は、そのタグのアイテム＝1つの範囲）
-//   [グループ名] [アイテム名]   グループ名・色はグループ全体、アイテム名はこのアイテムだけ
-//   [8色のパレット]             押すとすぐ、グループの色が変わる
-//   [解除] [削除] [グループをすべて削除]
-//     解除：このアイテムだけグループから外す（文字はそのまま）
-//     削除：このアイテムの文字を削除して、グループから外す
-//     グループをすべて削除：グループのすべてのアイテムの文字を削除して、グループも外す
-//   外したもの・消したものはライブラリに残り、右クリックの「グループを代入」からいつでも入れられる
 function openGroupEditPopover(g, tag, sp) {
   if (groupPopover && groupPopover.sp === sp) {
-    closeGroupPopover(); // 同じタグをもう一度押したら閉じる
+    closeGroupPopover();
     return;
   }
   closeGroupPopover();
@@ -3662,9 +3848,7 @@ function openGroupEditPopover(g, tag, sp) {
     swatches.forEach((b) => b.setAttribute("aria-checked", String(b.dataset.color === g.color)));
   paintSwatches();
 
-  // グループ名の候補（いまの他のグループ＋ライブラリ）。追加ポップアップと同じく、
-  // 既存のグループと同じ名前を選ぶと色も合わせ、確定時にそのグループへ統合できるようにする
-  const knownNames = new Map(); // 名前 → 色
+  const knownNames = new Map();
   for (const x of groupLibrary) if (!knownNames.has(x.name)) knownNames.set(x.name, x.color);
   for (const x of groups) if (x !== g) knownNames.set(x.name, x.color);
   const syncColorFromName = () => {
@@ -3677,8 +3861,8 @@ function openGroupEditPopover(g, tag, sp) {
 
   const suggestBox = root.querySelector(".my-group-suggest");
   let suggestNames = [];
-  let suggestIdx = -1; // キーボード（↑↓）で選んでいる候補。-1 は未選択
-  let popPos = null; // ポップアップの現在位置 { x, y }（候補で高さが変わったとき、画面からはみ出さないよう直すため）
+  let suggestIdx = -1;
+  let popPos = null;
 
   const fitPopover = () => {
     if (!popPos) return;
@@ -3699,7 +3883,7 @@ function openGroupEditPopover(g, tag, sp) {
     const starts = [];
     const contains = [];
     for (const n of knownNames.keys()) {
-      if (n === typed) continue; // 入力済みと同じものは出さない
+      if (n === typed) continue;
       const l = n.toLowerCase();
       if (!q || l.startsWith(q)) starts.push(n);
       else if (l.includes(q)) contains.push(n);
@@ -3738,8 +3922,6 @@ function openGroupEditPopover(g, tag, sp) {
     input.setSelectionRange(name.length, name.length);
   };
 
-  // グループ名：入力しながらタグに反映する（空にしたときは、確定時に元の名前へ戻す）。
-  // 既存のグループと同じ名前になったら、色もそのグループに合わせる
   input.addEventListener("input", () => {
     const name = input.value.trim().slice(0, GROUP_NAME_MAX);
     if (name) {
@@ -3759,14 +3941,14 @@ function openGroupEditPopover(g, tag, sp) {
     else suggestIdx = suggestIdx - 1 < -1 ? n - 1 : suggestIdx - 1;
     paintSuggestActive();
   });
-  // アイテム名：入力しながらタグに反映する（空にしてもよい）
+
   itemInput.addEventListener("input", () => {
     if (!sp) return;
     sp.item = itemInput.value.trim().slice(0, GROUP_ITEM_MAX);
     renderGroupBars();
     touchGroups();
   });
-  // 確定（Enter / フォーカスが外れたとき）：同じ名前・同じ色のグループがほかにあれば、1つにまとめる（既存のグループへ統合）
+
   const commitName = () => {
     if (!input.value.trim()) {
       input.value = g.name;
@@ -3778,7 +3960,7 @@ function openGroupEditPopover(g, tag, sp) {
     for (const s of g.spans) spans = mergeGroupSpan(spans, s);
     other.spans = spans;
     removeGroup(g);
-    closeGroupPopover(); // まとめたあとは、このグループは存在しないので閉じる
+    closeGroupPopover();
     return true;
   };
   input.addEventListener("change", commitName);
@@ -3787,7 +3969,7 @@ function openGroupEditPopover(g, tag, sp) {
       if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
       e.preventDefault();
       if (el === input && suggestIdx >= 0) {
-        pickSuggest(suggestNames[suggestIdx]); // 候補を選んでいるときは、その名前を入れるだけ
+        pickSuggest(suggestNames[suggestIdx]);
         return;
       }
       if (el === input ? !commitName() : true) closeGroupPopover();
@@ -3798,7 +3980,7 @@ function openGroupEditPopover(g, tag, sp) {
     b.addEventListener("click", () => {
       g.color = b.dataset.color;
       paintSwatches();
-      renderGroupBars(); // 縦線とタグの色をすぐ反映する
+      renderGroupBars();
       touchGroups();
     })
   );
@@ -3808,19 +3990,17 @@ function openGroupEditPopover(g, tag, sp) {
     else removeGroup(g);
   });
   root.querySelector(".my-group-remove").addEventListener("click", () => {
-    deleteGroupText(g, sp || undefined); // ポップアップを閉じて、このアイテムの文字を削除し、グループから外す
+    deleteGroupText(g, sp || undefined);
   });
   root.querySelector(".my-group-remove-all").addEventListener("click", () => {
-    deleteGroupText(g); // ポップアップを閉じて、グループのすべての文字を削除し、グループも外す
+    deleteGroupText(g);
   });
 
-  // ボタンを押しても、エディタのフォーカスを動かさない（入力欄だけは普通に押せる）。DeepL側のショートカットにキー入力を渡さない
   root.addEventListener("mousedown", (e) => {
     if (!(e.target instanceof Element && e.target.matches("input"))) e.preventDefault();
   });
   ["keydown", "keyup", "keypress"].forEach((type) => root.addEventListener(type, (e) => e.stopPropagation()));
 
-  // ポップアップとタグの外を押したら閉じる（タグは上の「もう一度押したら閉じる」に任せる）
   const onOutside = (e) => {
     if (!root.isConnected) {
       document.removeEventListener("pointerdown", onOutside, true);
@@ -3832,9 +4012,8 @@ function openGroupEditPopover(g, tag, sp) {
 
   layer.appendChild(root);
   groupPopover = { root, saved: null, group: g, sp, tag, onOutside };
-  renderSuggest(); // 開いた直後から候補を出す
+  renderSuggest();
 
-  // タグの右隣に置く。画面からはみ出すときは左隣／上に寄せる
   const origin = layer.getBoundingClientRect();
   const t = tag.getBoundingClientRect();
   const w = root.offsetWidth;
@@ -3847,9 +4026,6 @@ function openGroupEditPopover(g, tag, sp) {
   popPos = { x, y };
 }
 
-// 選択した文字を（選択したまま）クリックしたらポップアップを開く。
-// ・mousedown：選択範囲の文字の上を押したかを調べて覚えておく
-// ・click：ほとんど動かさずに離していたら、選択を元に戻してポップアップを開く（ドラッグは対象外）
 function setupGroupEdit() {
   ensureGroupStyle();
 
@@ -3857,7 +4033,7 @@ function setupGroupEdit() {
     "mousedown",
     (e) => {
       groupPending = null;
-      if (e.button !== 0 || e.detail !== 1) return; // 左クリック1回だけ（ダブルクリックは単語選択に使う）
+      if (e.button !== 0 || e.detail !== 1) return;
       if (!(e.target instanceof Element) || e.target.closest(".my-group-popover")) return;
 
       const editor = getSourceEditor();
@@ -3885,7 +4061,7 @@ function setupGroupEdit() {
       groupPending = null;
       if (!p || e.button !== 0) return;
       if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 5) return;
-      restoreGroupSelection(p.range); // クリックで選択が解除されているので戻す
+      restoreGroupSelection(p.range);
       openGroupPopover(p, { x: e.clientX, y: e.clientY });
     },
     true
@@ -3903,19 +4079,9 @@ function setupGroupEdit() {
   );
 }
 
-// ===== グループ情報つきの日本語テキスト（送信・保存・貼り付け） =====
-// 生成時に送る日本語プロンプト(prompt_jp)は、グループの範囲を次のマーカー行で挟んだ形にする。
-// この形のまま保存され、コピーしてエディタに貼り付けると、マーカーを外してグループとして復元する。
-// 英文(prompt_en)にはマーカーを含めない。
-//   <group name="グループ名" color="#60a5fa" item="アイテム名">   （item は、アイテム名があるときだけ付く）
-//   …グループに含まれる行…
-//   </group>
-// name は JSON の文字列表記（" や \ はエスケープされる）。範囲が複数あるグループは、同じ name / color のブロックが複数並ぶ。
 const GROUP_MARK_OPEN = /^\s*<group\s+name=("(?:[^"\\]|\\.)*")\s+color="(#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8}))"(?:\s+item=("(?:[^"\\]|\\.)*"))?\s*>\s*$/;
 const GROUP_MARK_CLOSE = /^\s*<\/group>\s*$/;
 
-// エディタ内の「行」の要素を上から順に集める（入れ子の段落は一番内側の段落を1行とする）。
-// グループの範囲（first / last）は、この行の要素のどれかを指している
 function editorLines(editor) {
   const lines = [];
   const NESTED = "p,div,li,h1,h2,h3,h4,h5,h6,blockquote,pre";
@@ -3934,19 +4100,16 @@ function editorLines(editor) {
   return lines;
 }
 
-// node（行の要素、またはその中のノード）が何行目か。見つからなければ -1
 function groupLineIndex(lines, node) {
   if (!node) return -1;
   return lines.findIndex((l) => l === node || l.contains(node));
 }
 
-// 行の文字列（空行は空文字）
 function groupLineText(el) {
   const t = el.nodeType === Node.TEXT_NODE ? el.nodeValue : el.innerText ?? el.textContent ?? "";
   return t.replace(/\r\n?/g, "\n").replace(/\n$/, "");
 }
 
-// グループがあるとき、グループの範囲をマーカー行で挟んだ日本語テキストを返す。グループがなければ null
 function getSourceTextWithGroups() {
   const editor = getSourceEditor();
   if (!editor || groups.length === 0) return null;
@@ -3963,7 +4126,6 @@ function getSourceTextWithGroups() {
   if (found.length === 0) return null;
   found.sort((x, y) => x.a - y.a);
 
-  // 範囲が重なることはないはずだが、万一重なったら後ろ側は無視する（マーカーが入れ子にならないように）
   const startAt = new Map();
   const endAt = new Set();
   let prevEnd = -1;
@@ -3984,8 +4146,6 @@ function getSourceTextWithGroups() {
   return out.join("\n");
 }
 
-// マーカーつきのテキストを、マーカーを除いた本文と、グループの一覧に分ける。
-// groups の start / end は、本文の何行目か（0始まり、end を含む）。マーカーがなければ null
 function parseGroupedText(text) {
   const src = String(text).replace(/\r\n?/g, "\n").split("\n");
   const lines = [];
@@ -4028,11 +4188,8 @@ function parseGroupedText(text) {
   return { text: lines.join("\n"), groups: found };
 }
 
-// 貼り付け中は、自分で送った貼り付けイベントを setupGroupPaste が拾い直さないようにする
 let groupPasting = false;
 
-// 貼り付けの直後、DeepL側の再描画が済んでグループの端の行が出そろうまで待つ（最大 約1秒）。
-// 固定の回数だけ待つのではなく、端の行に貼り付けた文字が入ったのを確かめて、すぐ次へ進む
 async function waitForPastedLines(editor, startIdx, parts, list) {
   const ok = () => {
     const lines = editorLines(editor);
@@ -4052,17 +4209,12 @@ async function waitForPastedLines(editor, startIdx, parts, list) {
   return false;
 }
 
-// マーカーを除いた本文を貼り付けて、マーカーのあった範囲にグループを付ける。
-// 本文は「貼り付けイベント」で一度に入れる（普通に貼り付けたときと同じ処理になるので速い）。
-// DeepLが受け付けなかったときだけ、1行ずつ入力する方法に切り替える。
-// 貼り付け先の行にもともと文字があるときは、その行ごとグループに含まれる
 async function pasteGroupedText(parsed) {
   const editor = getSourceEditor();
   if (!editor || !parsed.text.trim()) return;
-  exitMulti(); // Ctrl+D のマルチ編集中なら終了する
+  exitMulti();
   if (!isFocusInSourceEditor()) editor.focus({ preventScroll: true });
 
-  // 貼り付け位置（選択の開始位置）の行番号。貼り付ける前に調べておく
   let startIdx = -1;
   const sel = window.getSelection();
   if (sel && sel.rangeCount > 0) {
@@ -4081,11 +4233,11 @@ async function pasteGroupedText(parsed) {
       dt.setData("text/plain", parsed.text);
       const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
       const target = editor.contains(document.activeElement) ? document.activeElement : editor;
-      handled = !target.dispatchEvent(ev); // DeepL側が処理すると preventDefault されて false が返る
+      handled = !target.dispatchEvent(ev);
     } catch (_) {}
 
     if (!handled) {
-      // 切り替え先：Enter（段落の区切り）と文字入力を続けて実行する。再描画は待たずに一気に入れる
+
       for (let i = 0; i < parts.length; i++) {
         if (i > 0) document.execCommand("insertParagraph");
         if (parts[i]) document.execCommand("insertText", false, parts[i]);
@@ -4102,7 +4254,6 @@ async function pasteGroupedText(parsed) {
   const settled = await waitForPastedLines(editor, startIdx, parts, parsed.groups);
   if (!settled) console.warn("[group] 貼り付けた行の確認がとれませんでした。行の位置がずれている可能性があります");
 
-  // すべて追加のとき：貼り付けた全体の上下に、空行をちょうど1つにそろえる（行の数が変わるので、その分だけ位置をずらす）
   let base = startIdx;
   if (parsed.pad) {
     try {
@@ -4120,29 +4271,23 @@ async function pasteGroupedText(parsed) {
   }
 }
 
-// 貼り付けたブロック全体（先頭〜末尾の行）の上下に、空行をちょうど1つ置く。
-//   ・空行がなければ1つ足す / 2つ以上あれば1つに縮める / すでに1つならそのまま
-//   ・文章の先頭・末尾に接しているときは、その側に空行は置かない
-// 戻り値：先頭の行の番号がずれた数（上の空行を足したら +1、縮めたら −縮めた数）
 async function padBlankAround(editor, startIdx, list) {
   const s = startIdx + Math.min(...list.map((g) => g.start));
   const e = startIdx + Math.max(...list.map((g) => g.end));
   const isBlank = (l) => groupLineText(l).trim() === "";
   let shift = 0;
 
-  // 下側（先に直す。上側の番号に影響しない）
   let lines = editorLines(editor);
   if (e + 1 < lines.length) {
     if (isBlank(lines[e + 1])) {
       await collapseBlankLinesAt(editor, e + 1);
     } else {
       groupCaretAt(groupLineEdge(lines[e + 1], false));
-      document.execCommand("insertParagraph"); // 次の行の頭で改行 → 空行ができる
+      document.execCommand("insertParagraph");
       await waitForLineCount(editor, lines.length + 1);
     }
   }
 
-  // 上側
   lines = editorLines(editor);
   if (s > 0 && s < lines.length) {
     if (isBlank(lines[s - 1])) {
@@ -4158,7 +4303,6 @@ async function padBlankAround(editor, startIdx, list) {
   return shift;
 }
 
-// 翻訳元エディタへの貼り付けにマーカーが含まれていたら、マーカーを外して貼り付け、グループを復元する
 function setupGroupPaste() {
   document.addEventListener(
     "paste",
@@ -4176,28 +4320,20 @@ function setupGroupPaste() {
   );
 }
 
-// ===== 右クリックメニュー（翻訳元エディタの上で右クリックしたとき、自前のメニューを出す） =====
-//   [グループを代入 ›]  クリックすると、保存してあるグループの一覧が出る。
-//                      名前にカーソルを乗せると右側に中身が出る。選ぶと、右クリックした位置（カーソル）に
-//                      <group> マーカーつきで入り、グループとして復元される
-// ・Shift を押しながら右クリックすると、ブラウザ標準のメニューを出す
-// ・グループの名前・色・中身は「ライブラリ」に保存しておく。グループを解除・削除したあと、
-//   ページを再読み込みしたあとも残り、いつでも代入できる。保存数は GROUP_LIBRARY_MAX 件まで（古いものから消える）
-const GROUP_LIBRARY_KEY = "groupLibrary"; // chrome.storage に保存するキー
-const GROUP_LIBRARY_MAX = 30; // 保存しておくグループの最大数
-const GROUP_TAB_SIZE = 10; // 一覧のタブ1つに入れる件数
-const GROUP_PREVIEW_LINES = 14; // ホバー時の中身の表示行数の上限（超えた分は「…他N行」）
-let groupLibrary = []; // [{ id, name, color, spans: [[行の文字, ...], ...] }]  新しく作った・中身が変わった順
-let groupLibLoaded = false; // 保存済みのライブラリを読み込み終えたか（終えるまでは保存しない）
-let groupLibSavedJson = ""; // 最後に保存した内容（変化がないときは書き込まない）
+const GROUP_LIBRARY_KEY = "groupLibrary";
+const GROUP_LIBRARY_MAX = 30;
+const GROUP_TAB_SIZE = 10;
+const GROUP_PREVIEW_LINES = 14;
+let groupLibrary = [];
+let groupLibLoaded = false;
+let groupLibSavedJson = "";
 
 const newLibId = () => "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const findLibByNameColor = (name, color) => groupLibrary.find((x) => x.name === name && x.color === color);
 
-// 保存データの形を確かめて、使えるものだけ取り出す
 function sanitizeLibrary(raw) {
   if (!Array.isArray(raw)) return [];
-  // アイテム1つ：{ item, lines }。古い形式（行の文字の配列そのもの）も受け付ける
+
   const norm = (s) => {
     if (Array.isArray(s)) s = { item: "", lines: s };
     if (!s || typeof s !== "object" || !Array.isArray(s.lines) || s.lines.length === 0) return null;
@@ -4223,7 +4359,6 @@ function saveGroupLibrary() {
   storageSet({ [GROUP_LIBRARY_KEY]: groupLibrary });
 }
 
-// ライブラリの1件に入っているアイテム一覧（いまの内容＋解除・削除したアイテム。同じものは1つにまとめる）
 function libEntryItems(entry) {
   const seen = new Set();
   const out = [];
@@ -4236,10 +4371,9 @@ function libEntryItems(entry) {
   return out;
 }
 
-// アイテム（範囲）を解除・削除する直前に呼ぶ。そのアイテムの内容を、ライブラリの「残しておくアイテム」に入れる
 function libKeepSpans(g, spans) {
   if (!groupLibLoaded) return;
-  syncGroupLibrary(); // いまの内容をライブラリに反映しておく
+  syncGroupLibrary();
   const entry = groupLibrary.find((x) => x.id === g.libId);
   if (!entry) return;
   for (const sp of spans) {
@@ -4247,7 +4381,7 @@ function libKeepSpans(g, spans) {
     if (!lines || !lines.some((t) => t.trim())) continue;
     const it = { item: sp.item || "", lines: lines.slice() };
     if (it.item) {
-      // 同じアイテム名で残しているものがあれば、新しい内容で上書きする（重複させない）
+
       const i = entry.keep.findIndex((k) => k.item === it.item);
       if (i >= 0) {
         entry.keep[i] = it;
@@ -4260,17 +4394,12 @@ function libKeepSpans(g, spans) {
   saveGroupLibrary();
 }
 
-// いまあるグループをライブラリに反映する（syncGroups から呼ばれる）。
-// ・グループ（g.libId）ごとに1件。名前・色が変われば同じ件を更新する
-// ・中身は、各範囲が最後に確認できたときの行の文字（sp.full）。グループが解除・削除されても、ライブラリには残る
-// ・同じ名前・同じ色の別の件は、新しいほうで置き換える
 function syncGroupLibrary() {
   if (!groupLibLoaded) return;
   for (const g of groups) {
     if (!g.libId) g.libId = findLibByNameColor(g.name, g.color)?.id || newLibId();
     let entry = groupLibrary.find((x) => x.id === g.libId);
 
-    // 行が見つからない範囲しかないときは、保存済みの中身を（文字数を切り詰めた記録で）上書きしない
     let spans = null;
     if (g.spans.some((sp) => sp.full) || !entry) {
       spans = g.spans
@@ -4278,7 +4407,7 @@ function syncGroupLibrary() {
         .filter((x) => x.lines && x.lines.some((s) => s.trim()))
         .sort((x, y) => x.a - y.a)
         .map((x) => ({ item: x.item, lines: x.lines.slice() }));
-      // 同じアイテム名が複数あるときは、あとに出てくるほう（最新の内容）で上書きする
+
       if (spans.some((x) => x.item)) {
         const lastByItem = new Map();
         spans.forEach((x, i) => { if (x.item) lastByItem.set(x.item, i); });
@@ -4297,10 +4426,10 @@ function syncGroupLibrary() {
       if (spans && JSON.stringify(spans) !== JSON.stringify(entry.spans)) {
         entry.spans = spans;
         groupLibrary.splice(groupLibrary.indexOf(entry), 1);
-        groupLibrary.unshift(entry); // 中身が変わったものを先頭に
+        groupLibrary.unshift(entry);
       }
     }
-    // 残しておいたアイテムのうち、いまのアイテムと同じもの・同じアイテム名のものは、いまの内容に置き換わったので捨てる
+
     if (entry.keep.length) {
       const live = new Set(entry.spans.map((s) => JSON.stringify(s)));
       const names = new Set(entry.spans.map((s) => s.item).filter(Boolean));
@@ -4312,9 +4441,6 @@ function syncGroupLibrary() {
   saveGroupLibrary();
 }
 
-// ライブラリのグループの名前・色を変える（右クリックメニューの、アイテム一覧の見出しから）。
-// いまエディタに付いている同じグループ（libId が同じもの）にも反映する。
-// 変更後が、ほかの保存済みグループと同じ名前・同じ色になるときは、同じグループとして1つにまとめる（相手の中身は「残しておくアイテム」へ移す）
 function updateLibraryGroup(entry, name, color) {
   name = String(name).trim().slice(0, GROUP_NAME_MAX) || "グループ";
   entry.name = name;
@@ -4339,8 +4465,6 @@ function updateLibraryGroup(entry, name, color) {
   return entry;
 }
 
-// ライブラリのグループを1件削除する（右クリックメニューの「グループを削除」）。
-// いまエディタに付いている同じグループがあると、次の同期でライブラリに戻ってしまうので、そちらも解除する（文字はそのまま残る）
 function deleteLibraryGroup(entry) {
   for (const g of groups.slice()) if (g.libId === entry.id) removeGroup(g);
   const i = groupLibrary.indexOf(entry);
@@ -4348,12 +4472,8 @@ function deleteLibraryGroup(entry) {
   saveGroupLibrary();
 }
 
-let ctxMenu = null; // { root, saved, cleanup }
+let ctxMenu = null;
 
-// ライブラリの1件を、<group> マーカーつきで、保存しておいたカーソル位置に入れる。
-// only（アイテム1つ）を渡すと、そのアイテムだけ入れる。渡さないと、グループのすべてのアイテムを入れる。
-// すべて入れるとき：アイテム（ブロック）は空行を挟まずに連ねて入れ、全体の上下には空行をちょうど1つだけ置く
-// （すでに空行があれば足さず、2つ以上あれば1つに縮める。文章の先頭・末尾には置かない）
 async function insertGroupAtCursor(entry, saved, only) {
   const editor = getSourceEditor();
   if (!editor) return;
@@ -4371,7 +4491,6 @@ async function insertGroupAtCursor(entry, saved, only) {
   await pasteGroupedText({ text: lines.join("\n"), groups: list, pad: !only });
 }
 
-// range の先頭がある行の要素（空行も含む）。見つからなければ null
 function groupLineAtRange(editor, range) {
   let node = range.startContainer;
   if (node === editor) node = editor.childNodes[range.startOffset] || editor.lastChild;
@@ -4389,8 +4508,6 @@ function closeContextMenu() {
   m.root.remove();
 }
 
-// メニューの横に開くパネル（アイテムの一覧・中身）を from（隣のパネルの位置）の横に置く。
-// preferLeft: 左側に開きたいとき true。収まらなければ反対側に回す。実際に左側へ置いたかどうかを返す
 function placeCtxPanel(root, panel, from, top, preferLeft) {
   const rr = root.getBoundingClientRect();
   const w = panel.offsetWidth;
@@ -4411,21 +4528,16 @@ function placeCtxPanel(root, panel, from, top, preferLeft) {
   return flipped;
 }
 
-// アイテムの表示名。アイテム名がないときは、最初の文字のある行を薄く出す
 function ctxItemLabel(it) {
   if (it.item) return it.item;
   const first = (it.lines.find((s) => s.trim()) || "").trim();
   return first ? first.slice(0, 24) + (first.length > 24 ? "…" : "") : "名前なし";
 }
 
-// 右クリックメニュー：
-//   [グループを追加]
-//   [グループを代入 ›] → グループ名の一覧 › アイテム名の一覧 › （アイテム名にホバーで）中身
-//   アイテム名をクリックすると、そのアイテムが右クリックした位置に入る
 function openContextMenu(saved, point) {
   closeContextMenu();
   closeGroupPopover();
-  syncGroupLibrary(); // 作ったばかりのグループも一覧に出す
+  syncGroupLibrary();
   const layer = ensureGroupLayer();
 
   const root = document.createElement("div");
@@ -4456,8 +4568,6 @@ function openContextMenu(saved, point) {
   const itemsPanel = root.querySelector(".my-ctx-items");
   const preview = root.querySelector(".my-ctx-preview");
 
-  // 「グループを追加」：右クリックした時点の選択範囲の行に、これまでどおりのポップアップ（名前・色）を出す。
-  // 選択がなく、カーソルが置いてあるだけのときは、カーソルがある行を対象にする
   if (!saved) addBtn.disabled = true;
   addBtn.addEventListener("click", (e) => {
     const p = { x: e.clientX, y: e.clientY };
@@ -4471,22 +4581,20 @@ function openContextMenu(saved, point) {
       if (!line) return;
       anchors = [line];
       mark = document.createRange();
-      mark.selectNodeContents(line); // 対象の行を見せる
+      mark.selectNodeContents(line);
     }
     restoreGroupSelection(saved);
     openGroupPopover({ range: saved, anchors, mark }, p);
   });
 
-  // ---- 1段目：グループ名の一覧（この一覧づくりは、2段目の関数が出そろったあとの renderPage でやる） ----
-  let openBtn = null; // 2段目（アイテム一覧）を開いているグループの項目
+  let openBtn = null;
 
-  // ---- 3段目：アイテムの中身（アイテム名にホバー・フォーカスしたとき） ----
   const hidePreview = () => {
     preview.hidden = true;
     preview._for = null;
   };
   const showPreview = (items, color, btn) => {
-    if (preview._for === btn && !preview.hidden) return; // 同じ項目の上を動いているだけなら作り直さない
+    if (preview._for === btn && !preview.hidden) return;
     preview._for = btn;
     preview.textContent = "";
     let used = 0;
@@ -4517,11 +4625,10 @@ function openContextMenu(saved, point) {
       preview.appendChild(m);
     }
     preview.hidden = false;
-    // アイテム一覧の、さらに外側に出す
+
     placeCtxPanel(root, preview, itemsPanel.getBoundingClientRect(), btn.getBoundingClientRect().top, itemsPanel.classList.contains("is-left"));
   };
 
-  // ---- 2段目：選んだグループの中のアイテム名の一覧 ----
   const hideItems = () => {
     hidePreview();
     itemsPanel.hidden = true;
@@ -4546,8 +4653,6 @@ function openContextMenu(saved, point) {
     itemsPanel.textContent = "";
     itemsPanel.style.setProperty("--c", entry.color);
 
-    // 見出し（色＋グループ名）：クリックすると、その場で名前と色を変えられる
-    //   名前：Enter か、見出しをもう一度押すと確定（Esc で取り消し） / 色：選ぶとすぐ反映
     const head = document.createElement("div");
     head.className = "my-ctx-panel-head";
     head.setAttribute("role", "button");
@@ -4570,7 +4675,7 @@ function openContextMenu(saved, point) {
         b.style.setProperty("--c", c);
         b._color = c;
       }
-      btn.style.setProperty("--c", c); // 一覧の側（グループ名の行）も合わせる
+      btn.style.setProperty("--c", c);
       const dot = btn.querySelector(".my-ctx-dot");
       if (dot) dot.style.backgroundColor = c;
       if (swatchRow) {
@@ -4606,7 +4711,7 @@ function openContextMenu(saved, point) {
     };
     const startEdit = () => {
       if (nameInput) return;
-      pinned = true; // 編集中は、マウスが外れてもパネルを閉じない
+      pinned = true;
       head.classList.add("is-editing");
       hname.hidden = true;
       nameInput = document.createElement("input");
@@ -4619,13 +4724,13 @@ function openContextMenu(saved, point) {
       nameInput.setAttribute("aria-label", "グループ名");
       head.appendChild(nameInput);
       nameInput.addEventListener("keydown", (ev) => {
-        if (ev.isComposing) return; // 日本語入力の変換中の Enter は確定に使わない
+        if (ev.isComposing) return;
         if (ev.key === "Enter") {
           ev.preventDefault();
           stopEdit(true);
         } else if (ev.key === "Escape") {
           ev.preventDefault();
-          ev.stopPropagation(); // メニュー全体は閉じず、編集だけやめる
+          ev.stopPropagation();
           stopEdit(false);
         }
       });
@@ -4644,7 +4749,7 @@ function openContextMenu(saved, point) {
         sw.style.backgroundColor = c.value;
         sw.addEventListener("click", () => {
           const v = nameInput ? nameInput.value.trim() : entry.name;
-          // 入力途中の名前も一緒に確定する（色だけ変えるつもりなら、名前は変わらない）
+
           updateLibraryGroup(entry, v || entry.name, c.value);
           paintEntryColor();
           paintEntryName();
@@ -4680,7 +4785,7 @@ function openContextMenu(saved, point) {
       c.className = "my-ctx-count";
       c.textContent = countText;
       b.append(n, c);
-      b._items = list; // ホバーで出す中身
+      b._items = list;
       b._color = entry.color;
       b.addEventListener("click", () => {
         closeContextMenu();
@@ -4688,10 +4793,9 @@ function openContextMenu(saved, point) {
       });
       itemsPanel.appendChild(b);
     };
-    // アイテムが2つ以上あるときだけ、「すべて追加」を先頭に出す
+
     if (items.length > 1) makeBtn("my-ctx-all", "すべて追加", false, `${items.length}件`, items, null);
 
-    // 「グループを削除」：保存してあるグループをライブラリから消す。押し間違いを防ぐため、2回押して実行する
     const del = document.createElement("button");
     del.type = "button";
     del.className = "my-ctx-item my-ctx-delete";
@@ -4709,7 +4813,7 @@ function openContextMenu(saved, point) {
         return;
       }
       deleteLibraryGroup(entry);
-      renderPage(page); // 一覧を作り直す（メニューは閉じない）
+      renderPage(page);
       if (e.detail === 0) sub.querySelector(".my-ctx-group")?.focus({ preventScroll: true });
     });
     del.addEventListener("mouseleave", disarm);
@@ -4730,7 +4834,6 @@ function openContextMenu(saved, point) {
     if (focus) itemsPanel.querySelector(".my-ctx-entry, .my-ctx-all")?.focus({ preventScroll: true });
   };
 
-  // グループ名にホバー（キーボードなら選択移動）：アイテム名の一覧を出す。クリック：固定して先頭のアイテムへ
   sub.addEventListener("mouseover", (e) => {
     const btn = e.target instanceof Element ? e.target.closest(".my-ctx-group") : null;
     if (btn && btn._entry && btn !== openBtn) showItems(btn);
@@ -4746,7 +4849,6 @@ function openContextMenu(saved, point) {
     showItems(btn, e.detail === 0);
   });
 
-  // アイテム名にホバー（キーボードなら選択移動）：中身を右側に出す
   const onEntry = (e) => {
     const b = e.target instanceof Element ? e.target.closest(".my-ctx-entry, .my-ctx-all") : null;
     if (b && b._items) showPreview(b._items, b._color, b);
@@ -4756,7 +4858,6 @@ function openContextMenu(saved, point) {
   itemsPanel.addEventListener("focusin", onEntry);
   itemsPanel.addEventListener("mouseleave", hidePreview);
 
-  // ---- 1段目：グループ名の一覧。GROUP_TAB_SIZE 件ごとにタブで分ける（1ページぶんしかないときはタブを出さない） ----
   const tabs = document.createElement("div");
   tabs.className = "my-ctx-tabs";
   tabs.setAttribute("role", "tablist");
@@ -4819,14 +4920,13 @@ function openContextMenu(saved, point) {
   };
   renderPage(0);
 
-  // focus: true のとき（クリック・キーボード）だけ、一覧の先頭の項目にフォーカスを移す。ホバーで開いたときは動かさない
   const toggleSub = (open, focus = false) => {
     sub.hidden = !open;
     parent.setAttribute("aria-expanded", String(open));
     root.classList.toggle("is-sub-open", open);
     hideItems();
     if (!open) return;
-    // 右に収まらないときは左側に、下に収まらないときは上へずらす
+
     sub.classList.remove("is-left");
     sub.style.top = "";
     sub.style.maxHeight = `${window.innerHeight - 16}px`;
@@ -4839,8 +4939,6 @@ function openContextMenu(saved, point) {
     if (focus) sub.querySelector(".my-ctx-group")?.focus({ preventScroll: true });
   };
 
-  // 「グループを代入」にホバーしただけで一覧を開く。メニューの各パネル（項目と一覧・アイテム一覧）から出て少し経つと閉じる。
-  // クリック・キーボードで開いたときは「固定」し、ホバーが外れても閉じない（もう一度クリックで閉じる）
   let pinned = false;
   let closeTimer = 0;
   const cancelClose = () => clearTimeout(closeTimer);
@@ -4854,7 +4952,7 @@ function openContextMenu(saved, point) {
     if (sub.hidden) toggleSub(true);
   });
   row.addEventListener("mouseleave", scheduleClose);
-  itemsPanel.addEventListener("mouseenter", cancelClose); // 一覧からアイテム一覧へ移るあいだに閉じないようにする
+  itemsPanel.addEventListener("mouseenter", cancelClose);
   itemsPanel.addEventListener("mouseleave", scheduleClose);
   parent.addEventListener("click", (e) => {
     if (!sub.hidden && pinned) {
@@ -4866,18 +4964,16 @@ function openContextMenu(saved, point) {
     }
   });
 
-  // メニューを押しても、エディタのフォーカス・選択を動かさない
   root.addEventListener("mousedown", (e) => {
     if (!(e.target instanceof Element && e.target.matches("input"))) e.preventDefault();
   });
   root.addEventListener("contextmenu", (e) => e.preventDefault());
-  ["keyup", "keypress"].forEach((type) => root.addEventListener(type, (e) => e.stopPropagation())); // 名前の入力をDeepL側に渡さない
-  // DeepL側のショートカットにキー入力を渡さず、矢印キーで項目を動かす
-  //   ↑↓：いまのパネルの中で移動 / →：次の段（グループ→アイテム）へ / ←：前の段へ戻る / Esc：閉じる
+  ["keyup", "keypress"].forEach((type) => root.addEventListener(type, (e) => e.stopPropagation()));
+
   root.addEventListener("keydown", (e) => {
     e.stopPropagation();
     const active = document.activeElement;
-    if (active instanceof HTMLInputElement && root.contains(active)) return; // 名前の入力中：矢印や Esc は入力欄の側で扱う
+    if (active instanceof HTMLInputElement && root.contains(active)) return;
     const scopeItems = () => {
       const box = active instanceof Element ? active.closest(".my-ctx-items, .my-ctx-sub") : null;
       if (box && root.contains(box)) return [...box.querySelectorAll(".my-ctx-item:not(:disabled)")];
@@ -4897,7 +4993,7 @@ function openContextMenu(saved, point) {
       restoreGroupSelection(saved);
     } else if ((e.key === "PageDown" || e.key === "PageUp") && !sub.hidden) {
       e.preventDefault();
-      renderPage(page + (e.key === "PageDown" ? 1 : -1)); // タブを切り替える
+      renderPage(page + (e.key === "PageDown" ? 1 : -1));
       sub.querySelector(".my-ctx-group")?.focus({ preventScroll: true });
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -4918,7 +5014,7 @@ function openContextMenu(saved, point) {
     } else if (e.key === "ArrowLeft") {
       if (itemsPanel.contains(active) && openBtn) {
         e.preventDefault();
-        openBtn.focus({ preventScroll: true }); // アイテム一覧から、グループ名へ戻る
+        openBtn.focus({ preventScroll: true });
       } else if (!sub.hidden && sub.contains(active)) {
         e.preventDefault();
         pinned = false;
@@ -4933,7 +5029,7 @@ function openContextMenu(saved, point) {
     if (!root.contains(e.target)) closeContextMenu();
   };
   const onScroll = (e) => {
-    if (e.target instanceof Node && root.contains(e.target)) return; // メニュー自身のスクロールは無視
+    if (e.target instanceof Node && root.contains(e.target)) return;
     closeContextMenu();
   };
   const onClose = () => closeContextMenu();
@@ -4952,7 +5048,6 @@ function openContextMenu(saved, point) {
   layer.appendChild(root);
   ctxMenu = { root, saved, cleanup };
 
-  // 右クリックした位置に置く。画面からはみ出すときは寄せる
   const origin = layer.getBoundingClientRect();
   const w = root.offsetWidth;
   const h = root.offsetHeight;
@@ -4967,7 +5062,7 @@ function setupContextMenu() {
     "contextmenu",
     (e) => {
       if (e.shiftKey) {
-        closeContextMenu(); // Shift+右クリック：ブラウザ標準のメニュー
+        closeContextMenu();
         return;
       }
       if (!(e.target instanceof Element)) return;
@@ -4983,7 +5078,6 @@ function setupContextMenu() {
       e.preventDefault();
       e.stopPropagation();
 
-      // 右クリックした位置のカーソル（選択範囲）を覚えておく。選択がエディタの外なら、クリック位置から作る
       let saved = null;
       const sel = window.getSelection();
       if (sel && sel.rangeCount > 0) {
@@ -5007,7 +5101,6 @@ function setupContextMenu() {
   );
 }
 
-// HTMLからDOM要素を作る
 function createElementToInject() {
   const template = document.createElement("template");
   template.innerHTML = HTML.trim();
@@ -5020,11 +5113,12 @@ function createElementToInject() {
   setupImagePick(el);
   setupAspectDropdown(el);
   setupAdvanced(el);
+  setupLoraPopup(el);
 
   const swapButton = el.querySelector(".swap-button");
   if (swapButton) {
     swapButton.addEventListener("click", () => {
-      // 比率が選ばれているときは、比率も反転する（4:3 → 3:4）。先に反転しておけば、入れ替え後の値と矛盾しない
+
       const aspectSelect = el.querySelector(".aspect-select");
       if (aspectSelect && aspectSelect.value) {
         const [a, b] = aspectSelect.value.split(":");
@@ -5043,7 +5137,6 @@ function createElementToInject() {
   const generateBtn = el.querySelector("#generate_btn");
   generateBtn.addEventListener("click", () => runGenerate(el, generateBtn));
 
-  // 生成枚数スライダーの値に関係なく、1枚だけ生成する
   const generateOneBtn = el.querySelector("#generate_one_btn");
   generateOneBtn.addEventListener("click", () => runGenerate(el, generateOneBtn, 1));
 
@@ -5052,10 +5145,9 @@ function createElementToInject() {
   return el;
 }
 
-// 停止ボタンを押したときの処理。gen.py に実行中の生成の中断とコンテナの停止を依頼する。
 async function runStop(el, stopBtn) {
   if (stopBtn.disabled) return;
-  stopBtn.disabled = true; // 連打防止（応答が返るまで）
+  stopBtn.disabled = true;
 
   try {
     const res = await callApi("/api/stop", {});
@@ -5080,16 +5172,12 @@ async function runStop(el, stopBtn) {
   }
 }
 
-// 生成ボタンを押したときの処理本体。ボタンクリックからもCtrl+Enterのショートカットからも呼ばれる。
-// overrideNums を渡すと、生成枚数スライダーの代わりにその枚数で生成する（スライダーの値や保存値は変えない）
 async function runGenerate(el, generateBtn, overrideNums) {
   if (generateBtn.disabled) return;
   const [widthRange, heightRange, numsRange] = el.querySelectorAll(".slider-range");
 
-  // 押した時点の翻訳前(jp)・翻訳後(en)のテキストを送る
   const prompt_en = getTranslatedText();
-  // グループがあるときは、どの行からどの行までがどのグループかを <group> マーカー行で示した日本語テキストにする。
-  // 英文(prompt_en)にはグループ情報を含めない
+
   const groupedJp = getSourceTextWithGroups();
   const prompt_jp = groupedJp ?? getSourceText();
   if (!prompt_en) {
@@ -5101,7 +5189,7 @@ async function runGenerate(el, generateBtn, overrideNums) {
 
   const res = await callApi("/api/generate", {
     prompt_jp: prompt_jp,
-    // マーカーつきのときは、行の区切りがすでに正確なので、サーバー側の改行補正をしない
+
     jp_exact: groupedJp !== null,
     prompt_en: prompt_en,
     height: heightRange.value,
@@ -5110,11 +5198,11 @@ async function runGenerate(el, generateBtn, overrideNums) {
     GPU: getSelectedGpu(el),
     REF_BOOST: Number(el.querySelector(".adv-ref-boost").value),
     GROUNDING_PX: Number(el.querySelector(".adv-grounding-px").value),
-    // 詳細設定の LoRA。[{ version_id: "3409322", strength: 0.8 }, ...]（指定がなければ空の配列）
+
     loras: getLoras(el),
-    // 参照画像を選んでいるときだけ、そのローカルパスを送る（gen.py が読み込んで画像編集で生成する）
+
     ...(selectedImagePath ? { image_path: selectedImagePath } : {}),
-    // 「1枚だけ生成」は1回生成したら止める（サーバー側の連続生成をしない）
+
     once: overrideNums !== undefined,
   });
 
@@ -5123,13 +5211,13 @@ async function runGenerate(el, generateBtn, overrideNums) {
     setStatus(el, "noServer", res.error || "");
     flashGlow("error");
   } else if (res?.extensionError) {
-    // 拡張機能を再読み込みした後にタブをリロードしていない場合など
+
     console.error("[generate] 拡張機能との通信に失敗:", res);
     setStatus(el, "error", "拡張機能との通信に失敗しました。ページをリロードしてください");
     flashGlow("error");
   } else if (res?.ok) {
     setStatus(el, res.data?.queued ? "queued" : "started");
-    // 今回の生成で使った width / height / 生成枚数 を保存する（prompt は保存しない）
+
     storageSet({
       [STORAGE_KEYS.width]: widthRange.value,
       [STORAGE_KEYS.height]: heightRange.value,
@@ -5138,7 +5226,6 @@ async function runGenerate(el, generateBtn, overrideNums) {
       [STORAGE_KEYS.gpu]: getSelectedGpu(el),
       [STORAGE_KEYS.refBoost]: el.querySelector(".adv-ref-boost").value,
       [STORAGE_KEYS.groundingPx]: el.querySelector(".adv-grounding-px").value,
-      [STORAGE_KEYS.loras]: getLoras(el),
     });
   } else {
     console.error("[generate] サーバーがエラーを返しました:", res);
@@ -5147,25 +5234,17 @@ async function runGenerate(el, generateBtn, overrideNums) {
   }
 }
 
-// ===== 画像をページにドラッグしてきたとき =====
-// 画像ファイルをドラッグしたままページに入ると、パネルの中身をすべて隠して、
-// 点線の枠と「参照する画像をここにドラッグ」の文字だけにする（見た目は content.scss の .image-drop）。
-// html に付ける class で切り替えるので、DeepLの再描画でパネルが作り直されても表示は崩れない。
 const IMAGE_DRAG_CLASS = "my-image-dragging";
-const IMAGE_DRAG_IDLE_MS = 400; // dragover が途切れてからこの時間(ms)で、ドラッグが終わったとみなして元に戻す
+const IMAGE_DRAG_IDLE_MS = 400;
 
-// ドラッグ中のものが「画像ファイル」か。ドラッグ中は中身を読めないので、種類(type)だけで判定する
 function isImageDrag(e) {
   const dt = e.dataTransfer;
   if (!dt || !Array.from(dt.types || []).includes("Files")) return false;
   const items = Array.from(dt.items || []);
-  if (items.length === 0) return true; // 種類が分からないときは、ファイルなら表示する
+  if (items.length === 0) return true;
   return items.some((it) => it.kind === "file" && it.type.startsWith("image/"));
 }
 
-// 点線の枠にドロップされた画像。
-// ※拡張機能はドロップされたファイルの「本当のパス」を取得できないので、いまは選択状態にはしていない
-//   （参照画像は gen.py にパスを渡す作りのため）。ここに、サーバーへのアップロードなどの処理をつなげる
 function onReferenceImageDropped(file) {
   console.info("[image-drop] 画像がドロップされました:", file.name, file.type, file.size);
 }
@@ -5185,7 +5264,7 @@ function setupImageDrop() {
   const show = () => {
     root.classList.add(IMAGE_DRAG_CLASS);
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(hide, IMAGE_DRAG_IDLE_MS); // dragover が来る間は延長され続ける
+    idleTimer = setTimeout(hide, IMAGE_DRAG_IDLE_MS);
   };
 
   document.addEventListener("dragenter", (e) => { if (isImageDrag(e)) show(); }, true);
@@ -5197,13 +5276,13 @@ function setupImageDrop() {
       const over = zoneOf(e);
       zone()?.classList.toggle("is-over", !!over);
       if (over) {
-        e.preventDefault(); // ここへ落とせるようにする
+        e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
       }
     },
     true
   );
-  // ウィンドウの外へ出たら、すぐ元に戻す
+
   document.addEventListener(
     "dragleave",
     (e) => {
@@ -5216,9 +5295,9 @@ function setupImageDrop() {
     (e) => {
       const inZone = !!zoneOf(e) && root.classList.contains(IMAGE_DRAG_CLASS);
       hide();
-      if (!inZone) return; // 点線の枠の外は、これまでどおりDeepL側に任せる
-      e.preventDefault(); // ブラウザが画像を開いてしまうのを防ぐ
-      e.stopPropagation(); // DeepLのファイル翻訳に渡さない
+      if (!inZone) return;
+      e.preventDefault();
+      e.stopPropagation();
       const file = Array.from(e.dataTransfer?.files || []).find((f) => f.type.startsWith("image/"));
       if (file) onReferenceImageDropped(file);
     },
@@ -5227,7 +5306,6 @@ function setupImageDrop() {
   document.addEventListener("dragend", hide, true);
 }
 
-// 現在フォーカスしている要素が、翻訳元（入力側）エディタの中かどうかを判定する
 function isFocusInSourceEditor() {
   const active = document.activeElement;
   if (!active) return false;
@@ -5237,7 +5315,6 @@ function isFocusInSourceEditor() {
   });
 }
 
-// ソース側エディタでCtrl+Enter（Macの場合はCmd+Enterも）が押されたら、生成ボタンを押したのと同じ処理を走らせる
 function setupGenerateShortcut() {
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
@@ -5266,59 +5343,45 @@ function inject() {
 
   ensureScrollable();
   const injected = document.getElementById(CONFIG.injectedId);
-  if (injected) restoreSavedParams(injected); // 前回生成時のメタデータ（prompt除く）を復元
+  if (injected) restoreSavedParams(injected);
 
   return true;
 }
 
-// Ctrl+Enter(Cmd+Enter)での生成ショートカットを有効化
 setupGenerateShortcut();
 
-// 画像をページにドラッグしてきたら、パネルを「参照する画像をここにドラッグ」の表示に切り替える
 setupImageDrop();
 
-// 選択した文字と同じ文字をマークする機能を有効化
 setupSameHighlight();
 
-// Ctrl+D で、選択した文字と同じ文字をすべて同時に編集できるようにする（標準のCtrl+Dは無効化）
 setupMultiEdit();
 
-// 選択した文字をクリックすると、その行にグループ（左ボーダー）を付けるポップアップを出す
 setupGroupEdit();
 
-// グループ情報つきのテキスト（<group ...> マーカー）を貼り付けたら、マーカーを外してグループを復元する
 setupGroupPaste();
 
-// 翻訳元エディタで右クリックしたら、自前のメニュー（グループを代入）を出す
 setupContextMenu();
 
-// エディタが編集されたら、グループと行の対応を取り直す（Ctrl+Z などで行が作り直されても、グループを保つ）
 setupGroupObserver();
 
-// Ctrl+Z / Ctrl+Y の直後は、縮めたグループを元の大きさに戻せるか確かめる
 setupGroupHistory();
 
-// グループの最後の行の末尾で Enter：新しい行までグループを伸ばす。空行でもう一度 Enter：グループから外す
 setupGroupEnter();
 
-// Alt を押している間、縦線のホバー表示を「この要素だけ」に切り替える
 setupGroupAltKey();
 
-// ページを再読み込みしても、保存しておいたグループを同じ文字の行に付け直す
 loadSavedGroups();
 
-// 最初に一度試す
+loadLoraLibrary();
+
 inject();
 applyTheme();
 hideOutsideMainSection();
 
-// SPAなどで後から描画されるだとか再描画で消される場合に備えて監視する
 let refreshTimer = null;
 const observer = new MutationObserver((mutations) => {
   const mine = document.getElementById(CONFIG.injectedId);
 
-  // 自分が差し込んだ要素の中の変化だけなら何もしない（自分の更新で再発火するのを防ぐ）
-  // グループの縦線・ポップアップの更新でも再発火しないようにする
   const groupLayer = document.getElementById("my-group-layer");
   const onlyGroupLayerMoved = (m) =>
     m.type === "childList" &&
@@ -5326,7 +5389,6 @@ const observer = new MutationObserver((mutations) => {
     [...m.addedNodes, ...m.removedNodes].every((n) => n.id === "my-group-layer");
   if (mine && mutations.every((m) => mine.contains(m.target) || groupLayer?.contains(m.target) || onlyGroupLayerMoved(m))) return;
 
-  // DeepL側は頻繁にDOMが変わるので、まとめて少し待ってから1回だけ処理する
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     if (!document.getElementById(CONFIG.injectedId)) inject();
@@ -5342,7 +5404,6 @@ observer.observe(document.documentElement, {
   characterData: true,
 });
 
-// DeepLのテーマ切り替え（html/bodyのclassやstyleの変化）とOSのダーク設定の変化に追従する
 let themeTimer = null;
 const scheduleTheme = () => {
   clearTimeout(themeTimer);

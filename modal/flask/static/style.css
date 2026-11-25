@@ -60,7 +60,6 @@ body.thumbstrip-collapsed #thumbStripResizeHandle {
   bottom: 0;
   height: var(--term-height);
   min-height: 60px;
-  max-height: 480px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -262,7 +261,7 @@ body.term-collapsed #termResizeHandle {
   justify-content: space-between;
   gap: 16px;
   overflow-y: auto;
-  z-index: 5;
+  z-index: 12;
   transition: transform 0.2s ease;
 }
 #sidebar.collapsed {
@@ -347,7 +346,14 @@ body.term-collapsed #termResizeHandle {
 }
 
 .sidebar-top {
-  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+.sidebar-top > .sidebar-section-label,
+.sidebar-top > #sidebarPreviewWrap,
+.sidebar-top > #sidebarFilename {
+  flex-shrink: 0;
 }
 
 .sidebar-section-label {
@@ -422,6 +428,39 @@ body.term-collapsed #termResizeHandle {
 .copy-prompt-btn.is-error {
   border-color: #e5736b;
   color: #e5736b;
+}
+
+#sidebarInfo {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+}
+
+#sidebarInfoScroll {
+  flex: 1 1 0;
+  min-height: 80px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  margin-right: -4px;
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+#sidebarInfoScroll::-webkit-scrollbar {
+  width: 6px;
+}
+#sidebarInfoScroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+#sidebarInfoScroll.can-scroll-up {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+#sidebarInfoScroll.can-scroll-down {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
 #sidebarInfo .info-row {
@@ -512,6 +551,7 @@ body.term-collapsed #termResizeHandle {
 .sidebar-bottom {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .sidebar-row {
@@ -526,22 +566,31 @@ body.term-collapsed #termResizeHandle {
 }
 
 .favorite-folder-block {
-  padding-bottom: 12px;
+  padding-bottom: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: 4px;
+  margin-bottom: 0;
+}
+.favorite-folder-block .sidebar-row {
+  padding-bottom: 0;
+  gap: 8px;
+}
+
+#favoriteViewRow,
+#autoSwitchRow {
+  padding-bottom: 6px;
 }
 
 .favorite-folder-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   min-width: 0;
   flex: 1 1 auto;
 }
 
 .favorite-folder-btn {
   flex-shrink: 0;
-  padding: 5px 12px;
+  padding: 3px 10px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 6px;

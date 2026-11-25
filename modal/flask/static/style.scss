@@ -7,7 +7,6 @@ $panel-border: rgba(255, 255, 255, 0.08);
 $text-main: #eee;
 $text-sub: #888;
 
-// お気に入りフォルダ表示中のサムネイル一覧の背景色
 $fav-strip-bg: #7a2e50;
 
 $sidebar-width: 280px;
@@ -58,13 +57,11 @@ body {
     cursor: crosshair;
   }
 
-  // Shiftキーを押している間（通常のパン操作ではなく、画像を外部へ持ち出せることを示す）
   &.drag-out-mode {
     cursor: copy;
   }
 }
 
-// サイドバーを折りたたんだときは、ビューアーとサムネイル帯を画面右端まで広げる
 body.sidebar-collapsed {
   #viewer,
   #termPanel,
@@ -79,13 +76,11 @@ body.sidebar-collapsed {
   }
 }
 
-// サムネイル帯を折りたたんだときは、ビューアーを画面下端(ターミナルの上)まで広げる
 body.thumbstrip-collapsed {
   #viewer {
     bottom: var(--term-height);
   }
 
-  // ターミナルパネルの上に再展開用のつまみを出す
   .thumbstrip-expand-btn {
     bottom: var(--term-height);
   }
@@ -95,7 +90,6 @@ body.thumbstrip-collapsed {
   }
 }
 
-// 常時表示する、gen.py の出力をそのまま流し込むターミナルパネル（画面最下部）
 .term-panel {
   position: fixed;
   left: 0;
@@ -103,7 +97,7 @@ body.thumbstrip-collapsed {
   bottom: 0;
   height: var(--term-height);
   min-height: $term-min-height;
-  max-height: $term-max-height;
+
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -111,8 +105,6 @@ body.thumbstrip-collapsed {
   border-top: 1px solid $panel-border;
   z-index: 5;
 
-  // 限界まで狭めて非表示にしたときは、min-height(60px)も無効にして完全に隠す
-  // （min-heightが残ると、高さ0のはずでも60pxぶんが表示され、サムネイル帯と重なってしまう）
   &.collapsed {
     min-height: 0;
     height: 0;
@@ -174,7 +166,6 @@ body.thumbstrip-collapsed {
   }
 }
 
-// ターミナルパネルの上端(=サムネイル帯の下端)にある、ドラッグして高さを変えるためのハンドル
 #termResizeHandle {
   position: fixed;
   left: 0;
@@ -192,12 +183,10 @@ body.thumbstrip-collapsed {
   }
 }
 
-// ターミナル非表示中は、ハンドルを画面下端に8px全体表示して、上へドラッグすれば再表示できるようにする
 body.term-collapsed #termResizeHandle {
   margin-bottom: 0;
 }
 
-// ターミナル非表示中に画面右下に現れる、再表示用のつまみ（クリックで前回の高さに戻す）
 .term-expand-btn {
   position: fixed;
   right: calc(var(--sidebar-width) + 16px);
@@ -236,13 +225,11 @@ body.term-collapsed #termResizeHandle {
   user-select: none;
   -webkit-user-drag: none;
 
-  // Shiftキーを押している間、OS側へのドラッグ＆ドロップによる持ち出しを許可する
   &.drag-enabled {
     -webkit-user-drag: element;
   }
 }
 
-// 画像が存在しない/読み込みに失敗したときは、壊れたアイコンを出さず背景色のまま真っ暗にする
 .img-broken {
   visibility: hidden;
 }
@@ -319,7 +306,8 @@ body.term-collapsed #termResizeHandle {
   justify-content: space-between;
   gap: 16px;
   overflow-y: auto;
-  z-index: 5;
+
+  z-index: 12;
   transition: transform 0.2s ease;
 
   &.collapsed {
@@ -327,12 +315,11 @@ body.term-collapsed #termResizeHandle {
   }
 }
 
-// サイドバーの左端にある、ドラッグして幅を変えるためのハンドル
 #sidebarResizeHandle {
   position: absolute;
   top: 0;
   left: -4px;
-  width: 20px; // 当たり判定を広げる（見た目の線は ::after で細いまま）
+  width: 20px;
   height: 100%;
   cursor: col-resize;
   z-index: 10;
@@ -353,7 +340,6 @@ body.term-collapsed #termResizeHandle {
   }
 }
 
-// サイドバーを折りたたむボタン（サイドバー左上の角に配置）
 .sidebar-collapse-btn {
   position: absolute;
   top: 12px;
@@ -380,7 +366,6 @@ body.term-collapsed #termResizeHandle {
   }
 }
 
-// サイドバーを折りたたんだときに画面右上に現れる、再展開用のつまみ
 .sidebar-expand-btn {
   position: fixed;
   top: 16px;
@@ -414,7 +399,16 @@ body.term-collapsed #termResizeHandle {
 }
 
 .sidebar-top {
-  min-height: 0;
+
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+
+  > .sidebar-section-label,
+  > #sidebarPreviewWrap,
+  > #sidebarFilename {
+    flex-shrink: 0;
+  }
 }
 
 .sidebar-section-label {
@@ -449,7 +443,6 @@ body.term-collapsed #termResizeHandle {
   object-fit: contain;
   display: block;
 
-  // Shiftキーを押している間、OS側へのドラッグ＆ドロップによる持ち出しを示すカーソルにする
   &.drag-enabled {
     cursor: copy;
   }
@@ -484,7 +477,7 @@ body.term-collapsed #termResizeHandle {
   }
 
   &.is-ok {
-    // border-color: $select-border;
+
     border-color: rgb(220, 220, 220);
     background-color: rgb(220, 220, 220);
     color: rgb(33, 33, 33);
@@ -493,6 +486,43 @@ body.term-collapsed #termResizeHandle {
   &.is-error {
     border-color: #e5736b;
     color: #e5736b;
+  }
+}
+
+#sidebarInfo {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+}
+
+#sidebarInfoScroll {
+  flex: 1 1 0;
+  min-height: 80px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  margin-right: -4px;
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+  }
+
+  &.can-scroll-up {
+    border-top-color: $panel-border;
+  }
+
+  &.can-scroll-down {
+    border-bottom-color: $panel-border;
   }
 }
 
@@ -522,7 +552,6 @@ body.term-collapsed #termResizeHandle {
   }
 }
 
-// 生成時の詳細（参照画像・LoRAなど）。値が無いときは hidden 属性で隠す
 #sidebarInfo [hidden] {
   display: none;
 }
@@ -601,6 +630,7 @@ body.term-collapsed #termResizeHandle {
 .sidebar-bottom {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .sidebar-row {
@@ -615,24 +645,33 @@ body.term-collapsed #termResizeHandle {
 }
 
 .favorite-folder-block {
-  padding-bottom: 12px;
+
+  padding-bottom: 0;
   border-bottom: 1px solid $panel-border;
-  margin-bottom: 4px;
+  margin-bottom: 0;
+
+  .sidebar-row {
+    padding-bottom: 0;
+    gap: 8px;
+  }
 }
 
-// 「保存先を指定する」ラベルとフォルダ名を1セットとして縦に並べ、
-// そのセットと「選択」ボタンを横に並べる
+#favoriteViewRow,
+#autoSwitchRow {
+  padding-bottom: 6px;
+}
+
 .favorite-folder-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   min-width: 0;
   flex: 1 1 auto;
 }
 
 .favorite-folder-btn {
   flex-shrink: 0;
-  padding: 5px 12px;
+  padding: 3px 10px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 6px;
@@ -670,7 +709,6 @@ body.term-collapsed #termResizeHandle {
   line-height: 1.3;
 }
 
-// モダンでシンプルなトグルスイッチ（iOS風のピル型）
 .switch {
   position: relative;
   display: inline-flex;
@@ -685,7 +723,7 @@ body.term-collapsed #termResizeHandle {
     opacity: 0;
 
     &:checked + .switch-track {
-      // オンのときは、つまみと背景の配色を入れ替える（背景が明るく、つまみが青くなる）
+
       background: #c2c2c2;
 
       .switch-thumb {
@@ -741,8 +779,6 @@ body.term-collapsed #termResizeHandle {
       color: #bbb;
     }
 
-    // Ctrl+ドラッグ、Shift+ドラッグのような「キー2つ＋説明」の行は、
-    // キーの組をひとまとめにして左側に、説明文を右側に配置する
     .shortcut-keys {
       display: flex;
       align-items: center;
@@ -804,12 +840,10 @@ body.term-collapsed #termResizeHandle {
   z-index: 5;
   transition: transform 0.2s ease, background-color 0.2s ease;
 
-  // お気に入りフォルダ表示中はピンク背景
   &.is-favorite {
     background: $fav-strip-bg;
   }
 
-  // ターミナルパネルの下まで完全に隠す(自分の高さぶん + ターミナルの高さぶん移動する)
   &.collapsed {
     transform: translateY(calc(100% + var(--term-height)));
   }
@@ -822,7 +856,6 @@ body.term-collapsed #termResizeHandle {
     }
   }
 
-  // 透明のborderで、スクロールバーの上下に4pxずつ余白を作る（つまみ自体は8pxのまま）
   &::-webkit-scrollbar {
     height: 16px;
   }
@@ -834,7 +867,6 @@ body.term-collapsed #termResizeHandle {
   }
 }
 
-// サムネイル帯の上端にある、ドラッグして高さを変えるためのハンドル
 #thumbStripResizeHandle {
   position: fixed;
   left: 0;
@@ -852,7 +884,6 @@ body.term-collapsed #termResizeHandle {
   }
 }
 
-// サムネイル帯を折りたたんだときに画面左下に現れる、再展開用のつまみ
 .thumbstrip-expand-btn {
   position: fixed;
   left: 16px;
@@ -888,7 +919,7 @@ body.term-collapsed #termResizeHandle {
 .thumb {
   flex-shrink: 0;
   height: 100%;
-  // 画像の読み込み前（遅延読み込み中）は、代替テキストを出さず薄い枠だけ表示する
+
   background: rgba(255, 255, 255, 0.06);
   color: transparent;
   font-size: 0;
@@ -912,7 +943,6 @@ body.term-collapsed #termResizeHandle {
     border-color: $select-border;
   }
 
-  // お気に入りから削除予定のサムネイル（もう一度ダブルクリックで戻せる）
   &.pending-remove {
     opacity: 0.3;
     border-color: #ff5a5a;
@@ -946,7 +976,6 @@ body.term-collapsed #termResizeHandle {
   100% { opacity: 0; }
 }
 
-// 画像を前後に移動したときに画面端から走る波紋
 .nav-ripple {
   position: fixed;
   top: 0;
@@ -994,8 +1023,6 @@ body.term-collapsed #termResizeHandle {
   }
 }
 
-
-// ---- 右クリックメニュー ----
 #ctxMenu {
   position: fixed;
   z-index: 200;
@@ -1073,7 +1100,6 @@ body.term-collapsed #termResizeHandle {
   background: $panel-border;
 }
 
-// 操作結果の通知
 .toast {
   position: fixed;
   left: 50%;

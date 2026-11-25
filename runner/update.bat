@@ -9,7 +9,6 @@ set "REPO_URL=https://github.com/86har/modal-app"
 set "TMP_REPO=%ENGINE%\_repo"
 cd /d "%BOOT%"
 
-REM 前回の更新で残った古い update.bat.new を捨てる
 if exist "%BOOT%update.bat.new" del "%BOOT%update.bat.new" >nul 2>&1
 
 if not exist "%ENGINE%" (
@@ -17,7 +16,6 @@ if not exist "%ENGINE%" (
     goto :error
 )
 
-REM ===== 1. 最新ファイルを一時フォルダへ取得 =====
 if exist "%TMP_REPO%" rmdir /s /q "%TMP_REPO%"
 if exist "%ENGINE%\_zip_tmp" rmdir /s /q "%ENGINE%\_zip_tmp"
 
@@ -35,10 +33,6 @@ if %errorlevel%==0 (
     )
 )
 
-REM ===== 2. 配置 (engine\modal / engine\extention) とパッチ適用 =====
-REM リポジトリ内の構成が違っても、gen.py のあるフォルダを engine\modal へ、
-REM extention フォルダを engine\extention へ置き、重複したファイルは整理します。
-REM venv・config.json・secrets*.json には触れません。
 set "VPY=%ENGINE%\venv\Scripts\python.exe"
 if not exist "%VPY%" set "VPY=py -3"
 powershell -NoProfile -Command "$t=[IO.File]::ReadAllText('%~f0',[Text.Encoding]::UTF8); $i=$t.IndexOf('#PY_'+'BEGIN'); [IO.File]::WriteAllText('%ENGINE%\_patch.py',$t.Substring($i),(New-Object Text.UTF8Encoding($false)))" || goto :error
@@ -46,25 +40,21 @@ powershell -NoProfile -Command "$t=[IO.File]::ReadAllText('%~f0',[Text.Encoding]
 %VPY% "%ENGINE%\_patch.py" place "%ENGINE%" "%TMP_REPO%" "%EXT%"
 if errorlevel 1 goto :place_failed
 
-REM runner フォルダの bat (run / setup / deploy_and_run / update) を ROOT へ上書き
 %VPY% "%ENGINE%\_patch.py" runner "%ROOT:~0,-1%" "%BOOT:~0,-1%" "%TMP_REPO%"
 if errorlevel 1 goto :place_failed
 rmdir /s /q "%TMP_REPO%"
 
-REM ===== 3. config.json を参照するようにパッチを適用 =====
 %VPY% "%ENGINE%\_patch.py" patch "%ENGINE%"
 set "PATCH_RC=%errorlevel%"
 del "%ENGINE%\_patch.py" >nul 2>&1
 if not "%PATCH_RC%"=="0" goto :error
 
-REM 取得した最新コミットの SHA を記録 (run.bat の自動更新判定に使う)
 for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "try { (Invoke-RestMethod -Uri 'https://api.github.com/repos/86har/modal-app/commits/HEAD' -Headers @{Accept='application/vnd.github.sha'} -TimeoutSec 5).ToString().Trim() } catch { '' }"`) do >"%BOOT%repo_sha.txt" echo %%S
 
 echo.
 echo 更新が完了しました。
 if /i not "%~1"=="nopause" pause
 
-REM 実行中の update.bat 自身は直接上書きできないため、終了と同時に差し替える
 if exist "%BOOT%update.bat.new" (
     (goto) 2>nul & move /y "%BOOT%update.bat.new" "%~f0" >nul
 )
@@ -86,7 +76,6 @@ pause
 exit /b 1
 
 #PY_BEGIN
-# update.bat から自動展開されるパッチスクリプト(何度実行しても同じ結果になります)
 import os
 import re
 import shutil
@@ -164,7 +153,6 @@ VIEWER_PYTHON_FUNC = '''def _viewer_python():
 
 
 def patch_gen(text):
-    # viewer.py を別プロセスで起動するとき、空のコンソールウィンドウが出ないようにする
     if "def launch_viewer" not in text or "[sys.executable, str(VIEWER_PY)]" not in text:
         return None
     text = text.replace("subprocess.DETACHED_PROCESS", "subprocess.CREATE_NO_WINDOW")
@@ -172,7 +160,6 @@ def patch_gen(text):
     return text.replace("def launch_viewer", VIEWER_PYTHON_FUNC + "def launch_viewer", 1)
 
 
-# (ファイル名, パッチ関数, 適用済みかどうかの判定)
 TARGETS = [
     ("viewer.py", patch_viewer, lambda t: "_load_config" in t),
     ("modal_app.py", patch_modal_app, lambda t: "_load_config" in t),
@@ -210,7 +197,6 @@ def do_patch(ENGINE):
 
 
 ALWAYS_IGNORE = {".git", "__pycache__", "venv"}
-# リポジトリ直下に置かれていても engine\modal へは入れないもの
 TOP_IGNORE = {"engine", "extention", "extension", "_repo", "config.json",
               "setup.bat", "update.bat", "run.bat", "deploy_and_run.bat", "runner"}
 
@@ -236,7 +222,7 @@ def copy_tree(src, dst, top_ignore=()):
             copy_tree(item, target)
         else:
             if item.name.startswith("secrets") and item.suffix == ".json" and target.exists():
-                continue          # 手元の secrets は上書きしない
+                continue
             shutil.copy2(item, target)
 
 
@@ -252,7 +238,7 @@ def remove(path):
 
 
 def do_place(engine, repo, ext_dst):
-    gen = repo / "modal" / "gen.py"      # modal フォルダがあればそれを優先(直下の古い gen.py は無視)
+    gen = repo / "modal" / "gen.py"
     if not gen.is_file():
         gen = shallowest(repo, False, {"gen.py"})
     if gen is None:
@@ -261,7 +247,7 @@ def do_place(engine, repo, ext_dst):
     src_modal = gen.parent
     ignore = set(TOP_IGNORE)
     if src_modal == repo:
-        ignore.add("modal")       # 直下に gen.py がある場合、内側の modal は重複
+        ignore.add("modal")
     copy_tree(src_modal, engine / "modal", ignore)
     print(f"[place] {src_modal.relative_to(repo) if src_modal != repo else '(リポジトリ直下)'} -> engine\\modal")
 
@@ -272,11 +258,9 @@ def do_place(engine, repo, ext_dst):
         copy_tree(ext, ext_dst)
         print(f"[place] {ext.relative_to(repo)} -> {ext_dst}")
 
-    # 以前の版で engine 直下や modal の中に重複してできたものを整理
     for rel in ("gen.py", "modal_app.py", "flask", "extention", "extension",
                 "modal/modal", "modal/extention", "modal/extension"):
         remove(engine / rel)
-    # 旧版で engine 直下にできた空の出力フォルダ(中身がある場合は残す)
     for rel in ("output_images", "output_prompts"):
         d = engine / rel
         if d.is_dir() and all(f.name == ".gitkeep" for f in d.rglob("*") if f.is_file()):
@@ -289,7 +273,6 @@ def do_runner(root, boot, repo):
     if d is None:
         print("[runner] runner フォルダが見つかりません(スキップ)")
         return 0
-    # run.bat は ROOT、それ以外は boot へ置く
     dests = {"run.bat": root, "update.bat": boot,
              "setup.bat": boot, "deploy_and_run.bat": boot}
     for name, folder in dests.items():
@@ -305,11 +288,9 @@ def do_runner(root, boot, repo):
         if cur.is_file() and cur.read_bytes() == data:
             print(f"[runner] {name} は最新です")
             continue
-        # update.bat は実行中なので .new として置き、終了時に差し替える
         dst = folder / ("update.bat.new" if name == "update.bat" else name)
         dst.write_bytes(data)
         print(f"[runner] {name} を更新しました")
-    # 旧配置で boot に残った run.bat を削除
     old = boot / "run.bat"
     if old.is_file():
         old.unlink()

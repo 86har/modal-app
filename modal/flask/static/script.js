@@ -273,7 +273,7 @@
   var TERM_HEIGHT_KEY = 'termHeight';
   var TERM_COLLAPSED_KEY = 'termCollapsed';
   var TERM_MIN_HEIGHT = 60;
-  var TERM_MAX_HEIGHT = 480;
+  var TERM_VIEWER_MIN_HEIGHT = 80; // ターミナルを最大まで伸ばしても、ビューアーに最低これだけは残す
   var TERM_DEFAULT_HEIGHT = 160;
   var TERM_COLLAPSE_EDGE = 20; // この範囲まで画面端(サムネイル帯側)に近づけたら非表示にする
 
@@ -289,8 +289,18 @@
     if (termBody) termBody.scrollTop = termBody.scrollHeight;
   }
 
+  // ターミナルの上限は固定値ではなく、ウィンドウの高さ・サムネイル帯の高さから都度求める
+  // （固定の上限があると、そこで伸びが止まり、それ以降は急に動くように見えてしまう）
+  function getTermMaxHeight() {
+    var stripH = 0;
+    if (!document.body.classList.contains('thumbstrip-collapsed')) {
+      stripH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--thumb-strip-height'), 10) || 0;
+    }
+    return Math.max(TERM_MIN_HEIGHT, window.innerHeight - stripH - TERM_VIEWER_MIN_HEIGHT);
+  }
+
   function setTermHeight(px) {
-    px = Math.max(TERM_MIN_HEIGHT, Math.min(TERM_MAX_HEIGHT, Math.round(px)));
+    px = Math.max(TERM_MIN_HEIGHT, Math.min(getTermMaxHeight(), Math.round(px)));
     termLastHeight = px;
     applyTermHeightVar(px);
     if (termPanel) termPanel.classList.remove('collapsed');
@@ -322,8 +332,9 @@
     var savedHeight = TERM_DEFAULT_HEIGHT;
     try {
       var raw = parseInt(localStorage.getItem(TERM_HEIGHT_KEY), 10);
-      if (!isNaN(raw)) savedHeight = Math.max(TERM_MIN_HEIGHT, Math.min(TERM_MAX_HEIGHT, raw));
+      if (!isNaN(raw)) savedHeight = Math.max(TERM_MIN_HEIGHT, raw);
     } catch (e) {}
+    savedHeight = Math.min(savedHeight, getTermMaxHeight());
     termLastHeight = savedHeight;
 
     var savedCollapsed = false;
@@ -338,6 +349,17 @@
       if (termExpandBtn) termExpandBtn.hidden = true;
     }
   })();
+
+  // ウィンドウが小さくなったとき、ターミナルがはみ出さないように高さを収める
+  window.addEventListener('resize', function () {
+    if (document.body.classList.contains('term-collapsed')) return;
+    var max = getTermMaxHeight();
+    if (termLastHeight > max) {
+      applyTermHeightVar(max);
+      termLastHeight = max;
+      resetView();
+    }
+  });
 
   // つまみをクリックすると、前回の高さでターミナルを再表示する
   if (termExpandBtn) {
@@ -1514,6 +1536,21 @@
       .catch(function () { showToast('削除に失敗しました', true); });
   }
 
+  function revealCurrentImage() {
+    var item = getCurrentItem();
+    if (!item) return;
+    fetch('/reveal_image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: item.name, favorite: !!favoriteViewEnabled })
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('fail');
+        showToast('エクスプローラで開きました');
+      })
+      .catch(function () { showToast('エクスプローラで開けませんでした', true); });
+  }
+
   function setCtxCheck(el, checked) {
     el.classList.toggle('is-checked', !!checked);
     el.setAttribute('aria-checked', checked ? 'true' : 'false');
@@ -1582,6 +1619,7 @@
 
     var del = createCtxItem('del', '画像の削除', { danger: true });
     var copy = createCtxItem('copy', 'プロンプトのコピー');
+    var reveal = createCtxItem('reveal', 'エクスプローラで開く');
     var fav = createCtxItem('fav', 'お気に入り画像を表示', { check: true });
     var auto = createCtxItem('auto', '新しい画像を自動表示', { check: true });
     var sep = document.createElement('div');
@@ -1589,6 +1627,7 @@
 
     ctxMenu.appendChild(del);
     ctxMenu.appendChild(copy);
+    ctxMenu.appendChild(reveal);
     ctxMenu.appendChild(sep);
     ctxMenu.appendChild(fav);
     ctxMenu.appendChild(auto);
@@ -1615,6 +1654,13 @@
           setCopyLabel(msg === 'noimage' ? '画像がありません' : msg === 'notfound' ? 'プロンプトがありません' : 'コピーに失敗しました', 'error');
         });
     });
+    // 表示中の画像をエクスプローラで選択状態にして開く
+    reveal.addEventListener('click', function () {
+      resetDeleteArm();
+      if (reveal.classList.contains('is-disabled')) return;
+      hideContextMenu();
+      revealCurrentImage();
+    });
     // チェック項目はメニューを開いたまま、チェック状態だけ更新する
     fav.addEventListener('click', function () {
       resetDeleteArm();
@@ -1636,6 +1682,7 @@
     setCtxCheck(ctxItems.auto, autoSwitchEnabled);
     ctxItems.del.classList.toggle('is-disabled', !currentName);
     ctxItems.copy.classList.toggle('is-disabled', !currentName);
+    ctxItems.reveal.classList.toggle('is-disabled', !currentName);
   }
 
   function showContextMenu(x, y) {
@@ -1659,7 +1706,8 @@
   // メニューが開いている間は画面のどこを右クリックしても対象にして、素早い2回目の右クリックを逃さない
   document.addEventListener('contextmenu', function (e) {
     var inMenu = ctxMenu && ctxMenu.contains(e.target);
-    var inViewer = viewer.contains(e.target) && !(e.target.closest && e.target.closest('.nav-arrow'));
+    var inPreview = !!(sidebarPreviewWrap && sidebarPreviewWrap.contains(e.target));
+    var inViewer = (viewer.contains(e.target) && !(e.target.closest && e.target.closest('.nav-arrow'))) || inPreview;
     if (isContextMenuOpen()) {
       e.preventDefault();
       if (Date.now() - ctxOpenedAt <= CTX_DOUBLE_MS) {
@@ -1786,6 +1834,27 @@
         setTimeout(waitForUpdate, 2000);
       });
   }
+
+  // 画像情報の一覧がスクロール可能なときだけ、上下に境界線を表示する
+  (function setupInfoScrollBorders() {
+    var el = document.getElementById('sidebarInfoScroll');
+    if (!el) return;
+    function update() {
+      var max = el.scrollHeight - el.clientHeight;
+      el.classList.toggle('can-scroll-up', max > 1 && el.scrollTop > 1);
+      el.classList.toggle('can-scroll-down', max > 1 && el.scrollTop < max - 1);
+    }
+    el.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    if (window.ResizeObserver) new ResizeObserver(update).observe(el);
+    // 表示内容（解像度・LoRAなど）が差し替わったときも再計算する
+    if (window.MutationObserver) {
+      new MutationObserver(update).observe(el, {
+        childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'src']
+      });
+    }
+    update();
+  })();
 
   loadImagesList(true);
   waitForUpdate();

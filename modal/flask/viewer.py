@@ -14,7 +14,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 try:
-    from PIL import Image  # サムネイル生成用（無ければ元画像をそのまま返す）
+    from PIL import Image
 except ImportError:
     Image = None
 
@@ -22,19 +22,15 @@ BASE_DIR = Path(__file__).resolve().parent
 
 HOST = "127.0.0.1"
 VIEWER_PORT = 5000
-GEN_PORT = 8765  # gen.py の API サーバー（生成の進捗を取得する）
+GEN_PORT = 8765
 
-# 日本語プロンプトの保存先（gen_1.py と同じ階層 = このファイルの親フォルダ）
 PROMPT_DIR = BASE_DIR.parent / "output_prompts"
 
-# config.json の場所。run.bat が環境変数 KREA_CONFIG で渡す。
-# （viewer.py を単体で起動した場合は、ルートフォルダ = engine の一つ上にあるものとする）
 CONFIG_PATH = Path(os.environ.get("KREA_CONFIG") or (BASE_DIR.parent.parent.parent / "config.json"))
 
 DEFAULT_WATCH_DIR = BASE_DIR.parent / "output_images"
 
 def load_watch_dir() -> Path:
-    # config.json の WATCH_DIR を優先する。読み取れない／未設定の場合は既定のフォルダを使う
     if not CONFIG_PATH.is_file():
         return DEFAULT_WATCH_DIR
     try:
@@ -74,10 +70,9 @@ _watch = os.path.expandvars(os.path.expanduser(
     _cfg.get("WATCH_DIR") or str(Path.home() / "Downloads" / "outputs")
 ))
 if not os.path.isabs(_watch) and _cfg_dir:
-    _watch = str(_cfg_dir / _watch)   # 相対パスは config.json のある場所が基準
+    _watch = str(_cfg_dir / _watch)
 WATCH_DIR = _watch
 
-# UIから監視フォルダを変更した場合の永続化先（存在すれば config.json より優先する）
 WATCH_OVERRIDE_PATH = BASE_DIR / "watch_config.json"
 
 def load_watch_override():
@@ -109,13 +104,10 @@ PING_INTERVAL = 0.5
 
 SETTLE_SECONDS = 1.0
 
-# サムネイルのキャッシュ先とサイズ（長辺px）
 THUMB_DIR = BASE_DIR / ".thumb_cache"
 THUMB_SIZE = 384
-# サムネイル生成の同時実行数（スクロール操作で大量にリクエストが来ても CPU を食いつぶさない）
 THUMB_SEM = threading.Semaphore(2)
 
-# お気に入り画像の保存先フォルダ（設定はこのファイルに永続化する）
 FAVORITE_CONFIG_PATH = BASE_DIR / "favorite_config.json"
 
 viewer_app = Flask(
@@ -128,7 +120,6 @@ current_image = {"name": None}
 viewer_lock = threading.Lock()
 new_image_event = threading.Event()
 
-# 監視フォルダはUIから変更できるようにする（path と Observer を一緒に管理する）
 watch_lock = threading.Lock()
 watch_state = {"dir": WATCH_DIR, "observer": None}
 
@@ -158,7 +149,6 @@ def persist_favorite_folder(folder):
         pass
 
 def ask_directory_dialog(title="フォルダを選択"):
-    # ネイティブのフォルダ選択ダイアログを表示する（tkinter使用）
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -184,7 +174,6 @@ def unique_dest_path(folder, filename):
     return dest
 
 def favorite_name_set():
-    # お気に入りフォルダ内の画像ファイル名の集合
     with favorite_lock:
         folder = favorite_folder["path"]
     if not folder or not os.path.isdir(folder):
@@ -262,7 +251,7 @@ def make_thumb(src_path):
             return dest
         THUMB_DIR.mkdir(exist_ok=True)
         with THUMB_SEM:
-            if dest.is_file():  # 待っている間に他のスレッドが作り終えていた
+            if dest.is_file():
                 return dest
             tmp = THUMB_DIR / f"{key}.{threading.get_ident()}.tmp"
             with Image.open(src_path) as im:
@@ -313,7 +302,6 @@ def serve_thumb(folder, filename):
     if thumb is None:
         return send_from_directory(folder, name)
     resp = send_from_directory(str(THUMB_DIR), thumb.name)
-    # URL に ?t=mtime が付くので長期キャッシュして問題ない
     resp.headers["Cache-Control"] = "public, max-age=2592000"
     return resp
 
@@ -377,7 +365,6 @@ def prompt_by_name(filename):
 
 @viewer_app.route("/ref_image/<path:filename>")
 def ref_image_by_name(filename):
-    # 画像名のJSONに記録された参照画像だけを返す（任意のパスは受け付けない）。サムネイルに縮小して返す
     data, err = load_prompt_data(filename)
     if err:
         return err
@@ -468,7 +455,6 @@ def change_watch_dir(new_dir):
 
     new_observer = start_watch_observer(new_dir)
     with watch_lock:
-        # 切り替え中に別の変更が入っていた場合でも、自分が起動したObserverだけを登録する
         watch_state["observer"] = new_observer
 
     with viewer_lock:
@@ -480,7 +466,6 @@ def change_watch_dir(new_dir):
 @viewer_app.route("/watch/folder", methods=["GET", "POST"])
 def watch_folder_route():
     if request.method == "POST":
-        # キャンセル時やダイアログが使えない環境では None が返り、設定は変更しない
         folder = ask_directory_dialog(title="監視フォルダを選択")
         if folder:
             change_watch_dir(folder)
@@ -489,7 +474,6 @@ def watch_folder_route():
 @viewer_app.route("/favorite/folder", methods=["GET", "POST"])
 def favorite_folder_route():
     if request.method == "POST":
-        # キャンセル時やダイアログが使えない環境では None が返り、設定は変更しない
         folder = ask_directory_dialog()
         if folder:
             with favorite_lock:
@@ -521,8 +505,6 @@ def favorite_save():
         shutil.copy2(src, dest)
     except OSError:
         return jsonify({"error": "保存に失敗しました"}), 500
-    # copy2 は元画像の更新日時を引き継ぐため、そのままだと作成順に並んでしまう。
-    # お気に入りは「フォルダに追加した順」で並べたいので、更新日時を追加した時刻に更新する
     try:
         os.utime(dest, None)
     except OSError:
@@ -531,7 +513,6 @@ def favorite_save():
 
 @viewer_app.route("/favorite/delete", methods=["POST"])
 def favorite_delete():
-    # お気に入りフォルダ内のファイルだけを削除する（元画像 output_images 側は触らない）
     data = request.get_json(silent=True) or {}
     name = data.get("name")
     if not isinstance(name, str) or not is_image(name):
@@ -556,7 +537,6 @@ def favorite_delete():
 
 @viewer_app.route("/delete_image", methods=["POST"])
 def delete_image():
-    # 監視フォルダ内の画像ファイルを削除する（お気に入りフォルダ側のコピーには触らない）
     data = request.get_json(silent=True) or {}
     name = data.get("name")
     if not isinstance(name, str) or not is_image(name):
@@ -571,14 +551,40 @@ def delete_image():
         return jsonify({"error": "削除に失敗しました"}), 500
     return jsonify({"deleted": True})
 
-# 環境変数のプロキシ設定を経由せず、ローカルの gen.py に直接つなぐ
+@viewer_app.route("/reveal_image", methods=["POST"])
+def reveal_image():
+    import subprocess
+    data = request.get_json(silent=True) or {}
+    name = data.get("name")
+    if not isinstance(name, str) or not is_image(name):
+        return jsonify({"error": "不正なファイル名です"}), 400
+    name = os.path.basename(name)
+    if data.get("favorite"):
+        with favorite_lock:
+            folder = favorite_folder["path"]
+        if not folder:
+            return jsonify({"error": "保存先が設定されていません"}), 400
+    else:
+        folder = get_watch_dir()
+    target = os.path.normpath(os.path.join(folder, name))
+    if not os.path.isfile(target):
+        return jsonify({"error": "画像が見つかりません"}), 404
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", "/select,", target])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", target])
+        else:
+            subprocess.Popen(["xdg-open", os.path.dirname(target)])
+    except OSError:
+        return jsonify({"error": "エクスプローラを開けませんでした"}), 500
+    return jsonify({"opened": True})
+
 _local_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 _IDLE_PROGRESS = {"state": "idle", "percent": 0.0, "preparing": False}
 
 @viewer_app.route("/progress")
 def progress():
-    # gen.py の /api/progress をそのまま中継する。gen.py に繋がらない場合は待機中として返す
-    # （ブラウザ側でエラーを出さないよう、常に 200 で返す）
     try:
         with _local_opener.open(f"http://{HOST}:{GEN_PORT}/api/progress", timeout=1.0) as r:
             data = json.loads(r.read().decode("utf-8"))
@@ -594,8 +600,6 @@ _IDLE_LOG = {"lines": [], "cur": [], "version": 0}
 
 @viewer_app.route("/log")
 def log():
-    # gen.py の /api/log をそのまま中継する。gen.py に繋がらない場合は空のログとして返す
-    # （ブラウザ側でエラーを出さないよう、常に 200 で返す）
     try:
         with _local_opener.open(f"http://{HOST}:{GEN_PORT}/api/log", timeout=1.0) as r:
             data = json.loads(r.read().decode("utf-8"))

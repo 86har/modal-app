@@ -1,18 +1,5 @@
 import modal
 
-#   GPU種別              $/秒        $/時間(目安)  $30クレジットでの稼働時間目安
-#   ------------------- ---------- ----------- --------------------------
-#   Nvidia B300          0.001972   $7.10     4.2 時間
-#   Nvidia B200          0.001736   $6.25     4.8 時間
-#   Nvidia H200 SXM      0.001261   $4.54     6.6 時間
-#   Nvidia H100 SXM5     0.001097   $3.95     7.6 時間
-#   Nvidia RTX PRO 6000  0.000842   $3.03     9.9 時間
-#   Nvidia A100 (80GB)   0.000694   $2.50     12.0 時間
-#   Nvidia A100 (40GB)   0.000583   $2.10     14.3 時間
-#   Nvidia L40S          0.000542   $1.95     15.4 時間
-#   Nvidia A10           0.000306   $1.10     27.3 時間
-#   Nvidia L4            0.000222   $0.80     37.5 時間
-#   Nvidia T4            0.000164   $0.59     50.8 時間
 
 APP_NAME = "krea2"
 import json
@@ -44,8 +31,8 @@ COMFY = "/root/ComfyUI"
 STAGE_DIR = f"{MODELS}/upload_stage"
 MODEL_DIRS = ["diffusion_models", "text_encoders", "vae", "loras"]
 MAX_BATCH = 4
-UPLOAD_IDLE_SECONDS = 900   # 生成が止まってもMEGAのログイン状態を保持する時間(CPUのみなので安価)
-UPLOAD_CONCURRENCY = 4      # 同時に走らせる mega-put の数(不安定なら 1 にする)
+UPLOAD_IDLE_SECONDS = 900
+UPLOAD_CONCURRENCY = 4
 
 CKPT_NAME = "lustify-v10-krea-turbo-fp8.safetensors"
 CKPT_VERSION_ID = "3112728"
@@ -54,19 +41,15 @@ VAE_NAME = "qwen_image_vae.safetensors"
 HF_REPOS = ["Comfy-Org/Krea-2", "Comfy-Org/Krea2"]
 MEGA_DEST = "/outputs/Echs/"
 
-# --- Krea 2 Identity Edit LoRA (civitai.com/models/2761113) ---
-# このLoRAは通常の LoraLoader では動かず、専用のカスタムノード comfyui-krea2edit が必要。
-# 実在人物の写真を本人の同意なく使わないこと(配布元のライセンス・利用規約にも明記あり)。
 LORA_IDENTITY_NAME = "krea2_identity_edit_v2.safetensors"
-LORA_IDENTITY_VERSION_ID = "3409322"   # civitai のモデルバージョンID(v2.0)
-LORA_IDENTITY_FILE_ID = "3301281"      # 同バージョンに General Edit 用LoRAも同梱されているため明示指定
+LORA_IDENTITY_VERSION_ID = "3409322"
+LORA_IDENTITY_FILE_ID = "3301281"
 KREA2EDIT_NODES_REPO = "https://github.com/lbouaraba/comfyui-krea2edit"
 
 app = modal.App(APP_NAME)
 vol = modal.Volume.from_name("krea2-models", create_if_missing=True)
 secret = modal.Secret.from_name("krea2-tokens")
 
-# MEGAcmd までを共通ベースにする(レイヤーは従来と同じ内容なのでキャッシュも効く)
 _base = (
     modal.Image.from_registry("ubuntu:22.04", add_python="3.11")
     .apt_install("git", "wget", "ca-certificates", "libgl1", "libglib2.0-0")
@@ -76,7 +59,6 @@ _base = (
     )
 )
 
-# アップロード専用: torch / ComfyUI を含まないので、コンテナの起動が速い
 uploader_image = _base
 
 image = (
@@ -91,10 +73,8 @@ image = (
     .env({"HF_HOME": "/tmp/hf_cache", "PIP_NO_CACHE_DIR": "1"})
 )
 
-# 生成の進捗をローカル(gen.py)へ伝えるための共有 Dict。キーは gen.py が発行する progress_id。
-# gen.py 側の PROGRESS_DICT_NAME と同じ値にすること。
 PROGRESS_DICT_NAME = "krea2-progress"
-PROGRESS_MIN_INTERVAL = 0.25   # Dict への書き込み間隔の下限(秒)
+PROGRESS_MIN_INTERVAL = 0.25
 
 def _scrub(msg, *secrets):
     for s in secrets:
@@ -151,7 +131,7 @@ def download_file(url, dest, token=None, label="DOWNLOAD", force=False):
     volumes={MODELS: vol},
     secrets=[secret],
     timeout=1800,
-    max_containers=1,                    # mega-cmd のセッションは1コンテナで使い回す
+    max_containers=1,
     scaledown_window=UPLOAD_IDLE_SECONDS,
 )
 @modal.concurrent(max_inputs=UPLOAD_CONCURRENCY)
@@ -191,7 +171,6 @@ class MegaUploader:
         try:
             subprocess.run(list(args), check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
-            # コマンドラインにメール/パスワードが入る場合があるので、str(e) は使わない
             detail = ((e.stderr or b"") + (e.stdout or b"")).decode(errors="ignore")[-300:]
             raise RuntimeError(_scrub(detail, self.email, self.password)) from None
 
@@ -206,7 +185,6 @@ class MegaUploader:
         try:
             self._mega("mega-put", "-c", *paths, MEGA_DEST)
         except RuntimeError:
-            # セッション切れの可能性。ログイン状態を確認し、必要なら入り直して1回だけ再試行
             self._ensure_login()
             self._mega("mega-put", "-c", *paths, MEGA_DEST)
 
@@ -218,7 +196,7 @@ class MegaUploader:
         for p in paths:
             dst = f"{STAGE_DIR}/{os.path.basename(p)}"
             shutil.copy2(p, dst + ".part")
-            os.replace(dst + ".part", dst)   # 書きかけを再送しないよう、完成後に名前を確定
+            os.replace(dst + ".part", dst)
         vol.commit()
 
     def _drain_stash(self):
@@ -230,9 +208,9 @@ class MegaUploader:
             return
         try:
             try:
-                vol.reload()   # GPU側が退避した画像も見えるようにする
+                vol.reload()
             except Exception:
-                return         # Volume使用中。次回に回す
+                return
             stashed = glob.glob(f"{STAGE_DIR}/*.png")
             if not stashed:
                 return
@@ -285,8 +263,8 @@ class MegaUploader:
     scaledown_window=IDLE_SECONDS,
     timeout=3600,
     max_containers=1,
-    enable_memory_snapshot=True,                                  # CPUメモリのスナップショット
-    experimental_options={"enable_gpu_snapshot": True},          # GPUメモリも含める
+    enable_memory_snapshot=True,
+    experimental_options={"enable_gpu_snapshot": True},
 )
 class Krea:
     def _link_model_dirs(self):
@@ -324,7 +302,7 @@ class Krea:
         def lap(label):
             print(f"[startup] {label}: {time.time() - t0:.1f}s(累計)", flush=True)
 
-        changed = False   # Volume に書き込んだときだけ commit する
+        changed = False
 
         self._link_model_dirs()
 
@@ -387,8 +365,6 @@ class Krea:
         self.NCM = nodes.NODE_CLASS_MAPPINGS
         print("ノード読み込みOK。登録数:", len(self.NCM))
 
-        # サンプリングの1ステップごとに呼ばれる ComfyUI のフックを登録する(進捗表示用)。
-        # _progress_ctx が None の間(ウォームアップ中など)は何もしない。
         import comfy.utils
         self._progress_ctx = None
         comfy.utils.set_progress_bar_global_hook(self._on_comfy_progress)
@@ -400,13 +376,9 @@ class Krea:
         print("モデル読み込み完了")
         lap("モデル読み込み")
 
-        # ComfyUI はローダーを実行しただけでは VRAM に載せず、最初のサンプリングで載せる。
-        # 小さなダミー生成を1回走らせ、GPU転送とCUDA初期化までスナップショットに含める。
         self._warmup()
         lap("ウォームアップ(スナップショット直前)")
 
-        # スナップショットは小さいほど復元が速い。
-        # 使い終わったテンソルと、PyTorch がキャッシュしているだけの空きVRAMを手放してから撮る。
         import gc
 
         import torch
@@ -420,10 +392,9 @@ class Krea:
         import os
 
         self.civitai_token = os.environ.get("CIVITAI_TOKEN")
-        self._link_model_dirs()   # コンテナのファイルシステム側の状態は念のため作り直す
+        self._link_model_dirs()
         print("[startup] スナップショットから復元しました", flush=True)
 
-    # ---- 進捗の通知(失敗しても生成は止めない) ----
     def _progress_begin(self, progress_id, n):
         if not progress_id:
             self._progress_ctx = None
@@ -451,7 +422,7 @@ class Krea:
             ctx["dict"][ctx["id"]] = {
                 "stage": ctx["stage"], "n": ctx["n"], "done": ctx["done"],
                 "step": ctx["step"], "total": ctx["total"], "t": now,
-                "loras": ctx.get("loras") or [],   # gen.py が生成開始時にまとめて表示する
+                "loras": ctx.get("loras") or [],
             }
         except Exception:
             pass
@@ -578,9 +549,6 @@ class Krea:
                 f.write(data)
         vol.commit()
 
-    # ---- LoRA の状態(適用一覧 / ダウンロード済み・これからダウンロード)を gen.py に伝える ----
-    # status: "cached"(Volumeにある) / "pending"(これからダウンロード) / "downloading" /
-    #         "downloaded"(今回ダウンロードした) / "failed"
     def _lora_entry(self, label, version_id, strength, filename):
         path = f"{MODELS}/loras/{filename}"
         exists = os.path.exists(path)
@@ -656,10 +624,8 @@ class Krea:
         wf = self._loader_graph()
         model_ref, clip_ref = ["1", 0], ["2", 0]
 
-        # loras: [{"version_id": "...", "file_id": 省略可, "strength": 1.0}, ...]
-        # versionID.safetensors をファイル名として使い、無ければここでダウンロードする
         plan = self._lora_plan(loras)
-        self._set_progress_loras(pctx, plan)   # ダウンロード前に「どれが済み/未」かを通知
+        self._set_progress_loras(pctx, plan)
         if loras:
             for i, lora in enumerate(loras):
                 lora_name = self._ensure_lora(lora["version_id"], lora.get("file_id"), pctx, plan[i])
@@ -727,8 +693,6 @@ class Krea:
         self._progress_stage(pctx, "encoding", done=n)
         items = self._encode_pngs(images, names)
 
-        # MEGAへのアップロードは GPU なしの別コンテナ(MegaUploader)に任せる。
-        # spawn() はすぐ戻るので、GPU はアップロードを待たずに次の生成へ進める。
         upload_call_id = None
         if mega:
             try:
@@ -770,8 +734,6 @@ class Krea:
         user_plan = self._lora_plan(loras)
         self._set_progress_loras(pctx, [entry] + user_plan)
 
-        # 画像編集用LoRA: Volumeに無いときだけ、この生成コンテナの中でダウンロードしてそのまま生成する
-        # （事前確認のためにコンテナを起動しなくて済む。あれば何もしない）
         lora_path = f"{MODELS}/loras/{LORA_IDENTITY_NAME}"
         if not os.path.exists(lora_path):
             print("画像編集用LoRAが無いため、ダウンロードします（初回のみ）")
@@ -788,7 +750,6 @@ class Krea:
         }
         model_ref = ["lora", 0]
 
-        # 追加LoRA: versionID.safetensors が Volume に無ければ、ここでダウンロードして連結する
         for i, user_lora in enumerate(loras or []):
             user_name = self._ensure_lora(user_lora["version_id"], user_lora.get("file_id"), pctx, user_plan[i])
             node_id = f"user_lora_{i}"
@@ -934,7 +895,7 @@ class Krea:
         path = f"{MODELS}/loras/{lora_name}"
         url = f"https://civitai.com/api/download/models/{version_id}"
         if file_id:
-            url += f"?fileId={file_id}"   # 1バージョンに複数ファイルがある場合に対象を明示
+            url += f"?fileId={file_id}"
         download_file(url, path, token=self.civitai_token, label="LORA", force=force)
         vol.commit()
         return path
@@ -981,8 +942,6 @@ def main(prompt: str, seed: int = -1, steps: int = 8, w: int = 880, h: int = 124
                 f.write(png)
             print("保存:", name)
 
-    # アップロードは別コンテナで非同期に動いている。
-    # ここで待たないと、modal run の終了と同時に中断されてしまう。
     call_id = result.get("upload_call_id")
     if call_id:
         print("MEGAアップロードの完了を待っています...")
@@ -1000,7 +959,6 @@ def edit(image: str, instruction: str, image_b: str = None, seed: int = -1, step
     import time
 
     krea = Krea()
-    # 初回のみダウンロード(Volumeに既にあればスキップされる)
     krea.download_lora.remote(LORA_IDENTITY_NAME, LORA_IDENTITY_VERSION_ID, LORA_IDENTITY_FILE_ID)
 
     with open(image, "rb") as f:
