@@ -1,10 +1,31 @@
 @echo off
 chcp 65001 >nul
-set "BOOT=%~dp0"
-for %%I in ("%~dp0..") do set "ROOT=%%~fI\"
+set "HERE=%~dp0"
+set "WANT=3.13.17"
+
+REM ===== 配置の決定 =====
+REM setup.bat を置いたフォルダを ROOT とし、bat 類は ROOT\boot にまとめる。
+REM (すでに boot フォルダ内から実行された場合は、その1つ上を ROOT とする)
+for %%I in ("%~dp0.") do set "HN=%%~nxI"
+if /i "%HN%"=="boot" (
+    set "BOOT=%HERE%"
+    for %%I in ("%~dp0..") do set "ROOT=%%~fI\"
+    set "FIRST_RUN="
+) else (
+    set "ROOT=%HERE%"
+    set "BOOT=%HERE%boot\"
+    set "FIRST_RUN=1"
+)
 set "ENGINE=%ROOT%engine"
 set "EXT=%ROOT%extentions"
-set "WANT=3.13.17"
+
+if not exist "%BOOT%" mkdir "%BOOT%"
+if defined FIRST_RUN (
+    REM 同じ階層にある update.bat を boot へ移す (setup.bat は終了時に boot 版へ置き換わる)
+    if exist "%ROOT%update.bat" move /y "%ROOT%update.bat" "%BOOT%update.bat" >nul
+    if exist "%ROOT%deploy_and_run.bat" move /y "%ROOT%deploy_and_run.bat" "%BOOT%deploy_and_run.bat" >nul
+    copy /y "%~f0" "%BOOT%setup.bat" >nul
+)
 cd /d "%BOOT%"
 
 REM ===== 0. config.json の作成(無い場合のみ) =====
@@ -61,12 +82,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "%PS%" || goto :error
 
 REM ===== 6. GitHub から取得 → engine へ配置 → config.json 参照パッチ =====
 REM (update.bat と同じ処理を呼び出します)
-set "KREA_IN_SETUP=1"
+REM boot 内の setup.bat を直接実行している場合のみ、自分自身の上書きを避ける
+if not defined FIRST_RUN set "KREA_IN_SETUP=1"
+if not exist "%BOOT%update.bat" (
+    echo update.bat が見つかりません。setup.bat と同じ場所に置いてください。
+    goto :error
+)
 call "%BOOT%update.bat" nopause || goto :error
 
 echo.
 echo 完了しました。run.bat で起動できます。
 pause
+
+REM 最初に置いた setup.bat は boot へ移したので、実行終了と同時に削除する
+if defined FIRST_RUN (goto) 2>nul & del "%~f0"
 exit /b 0
 
 :error
