@@ -1254,11 +1254,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        try:
-            self.wfile.write(body)
-        except (ConnectionError, TimeoutError):
-            # ブラウザ側が先に接続を切った(タブを閉じた/再読み込みした等)。無視してよい
-            pass
+        self.wfile.write(body)
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -1312,13 +1308,6 @@ class GenServer(ThreadingHTTPServer):
     #  使用中のポートにも bind できてしまい、複数のプロセスが同時に起動する)
     allow_reuse_address = False
 
-    def handle_error(self, request, client_address):
-        # クライアントが接続を切っただけのエラーは、トレースバックを出さずに無視する
-        exc = sys.exc_info()[1]
-        if isinstance(exc, (ConnectionError, TimeoutError)):
-            return
-        super().handle_error(request, client_address)
-
     def server_bind(self):
         if os.name == "nt":
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
@@ -1357,7 +1346,7 @@ def main():
     print("\033[42m  準備完了  \033[0m")
     print("Modal Dashboard      -> \033[36mhttps://modal.com/apps/haru028/main\033[0m")
     print("Modal Billing usage  -> \033[36mhttps://modal.com/settings/usage\033[0m")
-    print("Ctrl+リンクをクリックでページにJump!!!")
+    print("Ctrl+リンクをクリックでページにJump!")
     print("Ctrl+Cでプログラムを停止")
     try:
         server.serve_forever()
