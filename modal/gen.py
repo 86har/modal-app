@@ -1265,7 +1265,7 @@ class GenServer(ThreadingHTTPServer):
 
 def main():
     global krea, STOP_AFTER_EACH
-    print("hello update!!")
+
     parser = argparse.ArgumentParser(description="Krea 画像生成サーバー + 画像ビューア")
     parser.add_argument("-d", "--deploy", action="store_true",
                         help="起動時に modal deploy を実行する")
